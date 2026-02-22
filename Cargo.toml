@@ -1,0 +1,39 @@
+[profile.dev]
+opt-level = 0
+debug = true
+split-debuginfo = 'unpacked' # Platform-specific.
+strip = "none"
+debug-assertions = true
+overflow-checks = true
+lto = "off"
+panic = 'unwind'
+incremental = true
+codegen-units = 256
+rpath = true
+
+[profile.release]
+opt-level = 3
+debug = false
+split-debuginfo = 'unpacked' # Platform-specific.
+strip = "symbols"
+debug-assertions = false
+overflow-checks = false
+lto = true
+panic = 'unwind'
+incremental = false
+codegen-units = 1
+rpath = false
+
+[package]
+name = "rss_notify"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+reqwest = { version = "0.12.28", features = ["json", "gzip", "blocking", "rustls-tls"] }
+rss = { version = "2.0.12", features = ["serde"] }
+bytes = "1.11.0"
+serde = "1.0.228"
+serde_json = "1.0.147"
+log = "0.4.29"
+env_logger = "0.11.9"

@@ -51,7 +51,7 @@ pub fn send_new_item_notification(items: &Vec<Item>) -> Vec<Result<Response, Err
 
 /// **Purpose**:    Sends a POST to pushbullet to make pushes for encountered errors
 /// **Parameters**: A &Vec<String> of encountered errors
-/// **Ok Return**:  A Vec<reqwest::blocking::Response> of all responses received from pushbullet
+/// **Ok Return**:  A reqwest::blocking::Response of the response received from pushbullet
 /// **Err Return**: A reqwest::Error from an unsuccessful POST
 /// **Panics**:     No
 /// **Modifies**:   Nothing

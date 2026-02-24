@@ -2,7 +2,6 @@ use crate::env_setup::source_env_var;
 use log::{debug, trace};
 use reqwest::{Error, blocking::Client, blocking::Response};
 use rss::Item;
-use serde_json::{Value, json};
 
 /// **Purpose**:    Sends a POST to ntfy to make pushes with article title and link of new rss content
 /// **Parameters**: A &Vec<rss:Item> of new rss content

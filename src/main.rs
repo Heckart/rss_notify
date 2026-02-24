@@ -98,13 +98,13 @@ fn main() {
 
                             if status != StatusCode::OK {
                                 warn!(
-                                    "Pushbullet gave non-OK response of {} for {}.",
+                                    "Ntfy gave non-OK response of {} for {}.",
                                     status, body
                                 );
                                 errors.push("The push {body} responded with {status}".to_string());
                             } else {
                                 debug!(
-                                    "Pushbullet responsed with\nStatus: {}\nBody:\n{}\n.",
+                                    "Ntfy responsed with\nStatus: {}\nBody:\n{}\n.",
                                     status, body
                                 );
                             }
@@ -158,7 +158,7 @@ fn try_send_failure_notification(errors: &mut Vec<String>, new_error: Option<Str
     match send_failure_notification(errors) {
         Ok(ok) => {
             debug!(
-                "Pushbullet responsed with\nStatus: {}\nBody:\n{}\n.",
+                "Ntfy responsed with\nStatus: {}\nBody:\n{}\n.",
                 ok.status(),
                 ok.text().unwrap()
             );

@@ -16,11 +16,11 @@ export RSS_NOTIFY_BIN="/absolute/path/to/rss_notify/target/release/rss_notify" #
 cur_date=$(date +%Y%m%d%H%M%S) # optional, just used to put the date in log files
 export RSS_NOTIFY_LOG_FILE="/absolute/path/to/where/you/want/rss_notify_log_${cur_date}.log" # wherever you want your log files stored and the naming convention for the individual log files
 export RSS_NOTIFY_LOG_RETENTION_DAYS=3 # the number of days you want log files to be saved for
-export PB_API_KEY="totallyRealPushbulletAccessToken" # your pushbullet api key
+export NTFY_TOPIC="sampleTopic" # the ntfy topic you want to publish new rss items to
 export RUST_LOG="info" # optional, whatever logging level you want (trace, debug, info, warn, error)
 ```
-5. As mentioned in the sample `.env` file, Pushbullet is used for the push notifications. The free tier will allow you to send 100 pushes per month. Go to your [account page](https://www.pushbullet.com/#settings/account), select “Create Access Token,” and copy the generated token into the `.env` file under the `PB_API_KEY` variable as shown in the previous step.
-6. You’re ready to run rss notify! I suggest running the provided `exec_rss_notify.sh` orchestrator script to do this, as it will automatically handle things like log creation and cleanup for you. You will not receive any notifications at first, as the first time a is read its history is only saved, but if you keep the program running (or kill it and start it up later without deleting the feed hist) as a new item makes it to the feed, you will get a pushbullet notification from rss notify. You can install the Pushbullet to your computer or phone.
+5. As mentioned in the sample `.env` file, [ntfy](https://docs.ntfy.sh/) is used for the push notifications. You will be able to send 250 pushes per day on the public API. This project originally used Pushbullet, but was switched to ntfy because ntfy is open source and has *significantly* higher usage limits.
+6. You’re ready to run rss notify! I suggest running the provided `exec_rss_notify.sh` orchestrator script to do this, as it will automatically handle things like log creation and cleanup for you. You will not receive any notifications at first, as the first time a is read its history is only saved, but if you keep the program running (or kill it and start it up later without deleting the feed hist) as a new item makes it to the feed, you will get a ntfy notification from rss notify. You can install the ntfy client to your computer or phone.
 7. Right now, rss notify is intended to be run in the background via cron so that it is always keeping up to date with the state of your tracked feeds, without needing any manual interventions. `exec_rss_notify.sh` will kill all other running instances of rss notify when it run, so I am currently using this cron schedule, which will fire once per day at midnight:
 ```cron
 0 0 * * * /absolute/path/to/rss_notify/exec_rss_notify.sh >> /absolute/path/to/rss_notify/logs/exec_rss_notify$(date +\%Y\%m\%d\%H\%M\%S).cron
@@ -32,9 +32,9 @@ export RUST_LOG="info" # optional, whatever logging level you want (trace, debug
 2. The byte content is converted into rss items. 
 3. If a feed has never been downloaded before, its history file is created with the current items and no more processing is done for the feed in the current loop.
 4. If a feed has an existing history file, the current contents are compared with the history. 
-5. If any new items exist, a POST request is sent to the Pushbullet API to alert about the new item, sending the item title and url.
+5. If any new items exist, a POST request is sent to the ntfy API to alert about the new item, sending the item title and url.
 ### Error handling
-If any of the steps mentioned above encounter an error, the program adds them to an error vector and will attempt to send a pushbullet push containing information on the encountered errors. The set-it-and-forget-it nature of this script means we will largely avoid panics. Currently, the script only panics if env variables cannot be read, files or directories cannot be created, opened, or written to, or if an rss feed is unserializable.
+If any of the steps mentioned above encounter an error, the program adds them to an error vector and will attempt to send a ntfy push containing information on the encountered errors. The set-it-and-forget-it nature of this script means we will largely avoid panics. Currently, the script only panics if env variables cannot be read, files or directories cannot be created, opened, or written to, or if an rss feed is unserializable.
 
 ## Styles and Standards
 ### General
@@ -63,11 +63,15 @@ If any of the steps mentioned above encounter an error, the program adds them to
 5. Code should be formatted with [rustfmt](https://github.com/rust-lang/rustfmt).
 
 ## TODO
-Here is some of the work that I still want to do:
+Here is some of the work that I still want to do, in no particular order:
 1. Add the ability to track changes to websites in general, rather than just rss feeds.
 2. Start using `etag`s or the `last-modified` header to decide whether or not to pull down a feed's contents in the first place, rather than actually pulling down the whole thing every time.
 3. Switch to using a sqlite db instead of plain text for feed history storage.
 4. Possibly make the GET and POST requests async instead of blocking, though I’m not sure if the effort is worth it on this one.
 5. Implement unit, integration, and end-to-end tests for everything.
-6. Set a max size for the error vector. If the number of encountered, unalerted errors goes over the limit, just kill the program to avoid potentially using up the entirety of free pushbullet capacity once the error pushes are allowed to go through. Possibly also start tracking error rate over time and even if the error pushes go through, but an earlier step is erroring on every loop, then also end early.
+6. Set a max size for the error vector. If the number of encountered, unalerted errors goes over the limit, just kill the program to avoid potentially using up the entirety of free ntfy push capacity once the error pushes are allowed to go through. Possibly also start tracking error rate over time and even if the error pushes go through, but an earlier step is erroring on every loop, then also end early.
 7. Set up a CI pipeline to enforce the linting and formatting rules specified in the above section.
+8. There are a few `panic!()`s that can probably be changed to more graceful error handling.
+9. `get_new_rss_items` can be broken up and made more modular.
+10. The feed history file names need a way to be more unique than they are now.
+11. Eventually, shift away from a third party service (ntfy) and create a basic Android shell app that leverages FCM to handle notifications.

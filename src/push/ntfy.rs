@@ -4,9 +4,9 @@ use reqwest::{Error, blocking::Client, blocking::Response};
 use rss::Item;
 use serde_json::{Value, json};
 
-/// **Purpose**:    Sends a POST to pushbullet to make pushes with article title and link of new rss content
+/// **Purpose**:    Sends a POST to ntfy to make pushes with article title and link of new rss content
 /// **Parameters**: A &Vec<rss:Item> of new rss content
-/// **Ok Return**:  A Vec<reqwest::blocking::Response> of all responses received from pushbullet
+/// **Ok Return**:  A Vec<reqwest::blocking::Response> of all responses received from ntfy
 /// **Err Return**: A Vec<reqwest::Error> from any unsuccessful POSTs
 /// **Panics**:     No
 /// **Modifies**:   Nothing
@@ -17,7 +17,7 @@ pub fn send_new_item_notification(items: &Vec<Item>) -> Vec<Result<Response, Err
         "Inside send_new_item_notification with {} items.",
         items.len()
     );
-    let pb_api_key: String = source_env_var("PB_API_KEY");
+    let ntfy_topic: String = source_env_var("NTFY_TOPIC");
 
     let client: Client = Client::new();
     let mut responses: Vec<Result<Response, Error>> = Vec::new();
@@ -33,14 +33,12 @@ pub fn send_new_item_notification(items: &Vec<Item>) -> Vec<Result<Response, Err
         };
 
         let push_title: String = format!("NEW ARTICLE: {}", article_title);
-        let push_body: Value = json!({"body": article_url, "title": push_title, "type": "note"});
 
-        debug!("Sending a POST reqeust to pushbullet with {}.", push_body);
+        debug!("Sending a POST reqeust to ntfy for {} {}.", push_title, article_url);
         let result: Result<Response, Error> = client
-            .post("https://api.pushbullet.com/v2/pushes")
-            .header("Access-Token", pb_api_key.clone())
-            .header("Content-Type", "application/json")
-            .json(&push_body)
+            .post(format!("https://ntfy.sh/{ntfy_topic}"))
+            .header("Title", push_title)
+            .header("Message", article_url)
             .send();
 
         responses.push(result);
@@ -49,32 +47,35 @@ pub fn send_new_item_notification(items: &Vec<Item>) -> Vec<Result<Response, Err
     responses
 }
 
-/// **Purpose**:    Sends a POST to pushbullet to make pushes for encountered errors
-/// **Parameters**: A &Vec<String> of encountered errors
-/// **Ok Return**:  A reqwest::blocking::Response of the response received from pushbullet
+/// **Purpose**:    Sends a POST to ntfy to make pushes for encountered errors
+/// **Parameters**: A &[String] of encountered errors
+/// **Ok Return**:  A reqwest::blocking::Response of the response received from ntfy
 /// **Err Return**: A reqwest::Error from an unsuccessful POST
 /// **Panics**:     No
 /// **Modifies**:   Nothing
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
-pub fn send_failure_notification(error_messages: &Vec<String>) -> Result<Response, Error> {
+pub fn send_failure_notification(error_messages: &[String]) -> Result<Response, Error> {
     trace!(
         "Inside send_failure_notification with  {} error_messages.",
         error_messages.len()
     );
-    let pb_api_key: String = source_env_var("PB_API_KEY");
+    let ntfy_topic: String = source_env_var("NTFY_TOPIC");
 
     let client: Client = Client::new();
 
     let push_title: String = format!("ERRORS: {}", error_messages.len());
-    let push_body: Value = json!({"body": error_messages, "title": push_title, "type": "note"});
+    let mut error_string: String = String::new();
 
-    debug!("Sending a POST reqeust to pushbullet with {}.", push_body);
+    for error in error_messages.iter() {
+        error_string = error_string + error + " ";
+    }
+
+    debug!("Sending a POST reqeust to ntfy for {} errors.", error_messages.len());
     let result: Result<Response, Error> = client
-        .post("https://api.pushbullet.com/v2/pushes")
-        .header("Access-Token", pb_api_key.clone())
-        .header("Content-Type", "application/json")
-        .json(&push_body)
+        .post(format!("https://ntfy.sh/{ntfy_topic}"))
+        .header("Title", push_title)
+        .header("Message", error_string)
         .send();
 
     result

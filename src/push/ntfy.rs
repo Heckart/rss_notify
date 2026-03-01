@@ -37,7 +37,7 @@ pub fn send_new_item_notification(items: &Vec<Item>) -> Vec<Result<Response, Err
         let result: Result<Response, Error> = client
             .post(format!("https://ntfy.sh/{ntfy_topic}"))
             .header("Title", push_title)
-            .header("Message", article_url)
+            .body(article_url)
             .send();
 
         responses.push(result);
@@ -56,7 +56,7 @@ pub fn send_new_item_notification(items: &Vec<Item>) -> Vec<Result<Response, Err
 /// **Status**:     Done
 pub fn send_failure_notification(error_messages: &[String]) -> Result<Response, Error> {
     trace!(
-        "Inside send_failure_notification with  {} error_messages.",
+        "Inside send_failure_notification with {} error_messages.",
         error_messages.len()
     );
     let ntfy_topic: String = source_env_var("NTFY_TOPIC");
@@ -64,17 +64,13 @@ pub fn send_failure_notification(error_messages: &[String]) -> Result<Response, 
     let client: Client = Client::new();
 
     let push_title: String = format!("ERRORS: {}", error_messages.len());
-    let mut error_string: String = String::new();
-
-    for error in error_messages.iter() {
-        error_string = error_string + error + " ";
-    }
+    let error_string: String = error_messages.join("\n");
 
     debug!("Sending a POST reqeust to ntfy for {} errors.", error_messages.len());
     let result: Result<Response, Error> = client
         .post(format!("https://ntfy.sh/{ntfy_topic}"))
         .header("Title", push_title)
-        .header("Message", error_string)
+        .body(error_string)
         .send();
 
     result

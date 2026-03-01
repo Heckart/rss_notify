@@ -52,7 +52,7 @@ fn main() {
                 }
                 Err(err) => {
                     let err_msg: String = construct_full_error(&err);
-                    warn!("fetch_feed_as_bytes: {}", err_msg);
+                    warn!("fetch_feed_as_bytes: failed to fetch feed bytes: {}", err_msg);
                     try_send_failure_notification(&mut errors, Some(err_msg));
                     continue;
                 }
@@ -67,7 +67,7 @@ fn main() {
                 }
                 Err(err) => {
                     let err_msg: String = construct_full_error(&err);
-                    warn!("get_new_rss_items: {}", err_msg);
+                    warn!("get_new_rss_items: failed to get new rss items: {}", err_msg);
                     try_send_failure_notification(&mut errors, Some(err_msg));
                     continue;
                 }
@@ -141,7 +141,7 @@ fn main() {
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
 fn construct_full_error(err: &dyn Error) -> String {
-    let mut err_message: String = format!("Failed to fetch feed bytes due to error: {err}");
+    let mut err_message: String = format!("Encountered error: {err}");
     let mut current: &dyn Error = &err;
     // not using write macro here so theres no unwrap or extra error handling
     while let Some(source) = current.source() {

@@ -2,7 +2,6 @@
 #![deny(warnings)]
 use bytes::Bytes;
 use log::{debug, info, trace, warn};
-use reqwest::Error;
 use reqwest::StatusCode;
 use reqwest::blocking::Response;
 use rss::Item;
@@ -10,6 +9,7 @@ use rss_notify::env_setup::get_feed_list;
 use rss_notify::fetch::fetch_feed_as_bytes;
 use rss_notify::parse::get_new_rss_items;
 use rss_notify::push::{send_failure_notification, send_new_item_notification};
+use std::error::Error;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -51,11 +51,9 @@ fn main() {
                     bytes
                 }
                 Err(err) => {
-                    warn!(
-                        "Failed to fetch feed bytes from {} due to error: {}.",
-                        url, err
-                    );
-                    try_send_failure_notification(&mut errors, Some(err.to_string()));
+                    let err_msg: String = construct_full_error(&err);
+                    warn!("fetch_feed_as_bytes: {}", err_msg);
+                    try_send_failure_notification(&mut errors, Some(err_msg));
                     continue;
                 }
             };
@@ -68,11 +66,9 @@ fn main() {
                     items
                 }
                 Err(err) => {
-                    warn!(
-                        "Failed to deserialize rss bytes from {} due to error: {}",
-                        url, err
-                    );
-                    try_send_failure_notification(&mut errors, Some(err.to_string()));
+                    let err_msg: String = construct_full_error(&err);
+                    warn!("get_new_rss_items: {}", err_msg);
+                    try_send_failure_notification(&mut errors, Some(err_msg));
                     continue;
                 }
             };
@@ -87,7 +83,7 @@ fn main() {
                     url
                 );
 
-                let push_results: Vec<Result<Response, Error>> =
+                let push_results: Vec<Result<Response, reqwest::Error>> =
                     send_new_item_notification(&feed_items);
 
                 for response in push_results {
@@ -97,11 +93,8 @@ fn main() {
                             let body: String = ok.text().unwrap();
 
                             if status != StatusCode::OK {
-                                warn!(
-                                    "Ntfy gave non-OK response of {} for {}.",
-                                    status, body
-                                );
-                                errors.push("The push {body} responded with {status}".to_string());
+                                warn!("Ntfy gave non-OK response of {} for {}.", status, body);
+                                errors.push(format!("The push {body} responded with {status}"));
                             } else {
                                 debug!(
                                     "Ntfy responsed with\nStatus: {}\nBody:\n{}\n.",
@@ -110,8 +103,12 @@ fn main() {
                             }
                         }
                         Err(err) => {
-                            warn!("Initial response had errors: {}.", err);
-                            errors.push(err.to_string());
+                            let err_msg: String = construct_full_error(&err);
+                            warn!(
+                                "send_new_item_notification: Initial response had errors: {}.",
+                                err_msg
+                            );
+                            errors.push(err_msg.to_string());
                             debug!("Total errors are {}.", errors.len());
                         }
                     }
@@ -136,9 +133,30 @@ fn main() {
     }
 }
 
+/// **Purpose**:    Walks down the whole chain of error sources, adding each source to a String
+/// **Parameters**: A &str with the erroring function's name, A &dyn Error with the function's error
+/// **Returns**:    A string containing the whole chain of error sources from the provided &dyn Error
+/// **Panics**:     No
+/// **Modifies**:   Nothing
+/// **Tests**:      Not implemented yet
+/// **Status**:     Done
+fn construct_full_error(err: &dyn Error) -> String {
+    let mut err_message: String = format!("Failed to fetch feed bytes due to error: {err}");
+    let mut current: &dyn Error = &err;
+    // not using write macro here so theres no unwrap or extra error handling
+    while let Some(source) = current.source() {
+        err_message += "\nCaused by: ";
+        err_message.push_str(&source.to_string());
+        current = source;
+    }
+
+    err_message
+}
+
 /// **Purpose**:    Attempts to send a push containing error information (used for all errors that have not been
 ///                 sent in a push yet)
-/// **Parameters**: A &mut Vec<String> of encountered errors
+/// **Parameters**: A &mut Vec<String> of encountered errors, a Option<String> of a new error to
+///                 add to the error vector
 /// **Returns**:    Nothing
 /// **Panics**:     No
 /// **Modifies**:   Appends an error to the errors vector is one is supplied, Clears the errors vector if a successful push occurs
@@ -166,8 +184,9 @@ fn try_send_failure_notification(errors: &mut Vec<String>, new_error: Option<Str
             errors.clear();
         }
         Err(err) => {
-            warn!("Attempt to send errors had errors {}.", err);
-            errors.push(err.to_string());
+            let err_msg: String = construct_full_error(&err);
+            warn!("Attempt to send errors had errors {}.", err_msg);
+            errors.push(err_msg);
             debug!("Total errors are {}.", errors.len());
         }
     }

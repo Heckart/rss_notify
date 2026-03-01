@@ -134,7 +134,7 @@ fn main() {
 }
 
 /// **Purpose**:    Walks down the whole chain of error sources, adding each source to a String
-/// **Parameters**: A &str with the erroring function's name, A &dyn Error with the function's error
+/// **Parameters**: A &dyn Error with the function's error
 /// **Returns**:    A string containing the whole chain of error sources from the provided &dyn Error
 /// **Panics**:     No
 /// **Modifies**:   Nothing

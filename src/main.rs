@@ -1,10 +1,11 @@
 #![warn(clippy::all)]
-#![deny(warnings)]
+//#![deny(warnings)]
 use bytes::Bytes;
 use log::{debug, info, trace, warn};
 use reqwest::StatusCode;
 use reqwest::blocking::Response;
 use rss::Item;
+use rss_notify::database::{DBEntry, feed_is_in_db, insert_feed_to_db, setup_db};
 use rss_notify::env_setup::get_feed_list;
 use rss_notify::fetch::fetch_feed_as_bytes;
 use rss_notify::parse::get_new_rss_items;
@@ -33,6 +34,58 @@ fn main() {
     env_logger::init();
     trace!("Starting up!");
 
+    let conn = setup_db("RSS_NOTIFY_DB");
+
+    // TEMP CODE
+    let test_row: DBEntry = DBEntry {
+        feed_name: "www.example.com".to_string(),
+        history: "fake feed history".to_string(),
+        last_modified: None,
+        etag: None,
+    };
+
+    match feed_is_in_db(&conn, "www.example.com") {
+        Ok(ok) => {
+            if !ok {
+                println!("query successful! Row doesn't exist!");
+            } else {
+                println!("query successful but row exists??");
+                panic!();
+            }
+        }
+        Err(_) => {
+            println!("query NOT successful!");
+            panic!();
+        }
+    }
+
+    match insert_feed_to_db(&conn, test_row) {
+        Ok(ok) => {
+            println!("insert successful! Status code: {}", ok);
+        }
+        Err(err) => {
+            println!("insert FAILED!");
+            panic!();
+        }
+    }
+
+    match feed_is_in_db(&conn, "www.example.com") {
+        Ok(ok) => {
+            if ok {
+                println!("query successful! Row exists!");
+                panic!()
+            } else {
+                println!("query successful but row doesn't exists??");
+                panic!();
+            }
+        }
+        Err(_) => {
+            println!("query NOT successful!");
+            panic!();
+        }
+    }
+    // END TEMP CODE
+
     // any recoverable errors are added to this vec. We will keep trying to send a push containing
     // all of the previously encountered errors
     let mut errors: Vec<String> = Vec::new();
@@ -52,7 +105,10 @@ fn main() {
                 }
                 Err(err) => {
                     let err_msg: String = construct_full_error(&err);
-                    warn!("fetch_feed_as_bytes: failed to fetch feed bytes: {}", err_msg);
+                    warn!(
+                        "fetch_feed_as_bytes: failed to fetch feed bytes: {}",
+                        err_msg
+                    );
                     try_send_failure_notification(&mut errors, Some(err_msg));
                     continue;
                 }
@@ -67,7 +123,10 @@ fn main() {
                 }
                 Err(err) => {
                     let err_msg: String = construct_full_error(&err);
-                    warn!("get_new_rss_items: failed to get new rss items: {}", err_msg);
+                    warn!(
+                        "get_new_rss_items: failed to get new rss items: {}",
+                        err_msg
+                    );
                     try_send_failure_notification(&mut errors, Some(err_msg));
                     continue;
                 }

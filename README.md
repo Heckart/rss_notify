@@ -2,7 +2,7 @@
 Artisanal, hand-crafted, agent-free code to automatically observe rss feeds and send push notifications whenever new items are present.
 
 ## Inspiration
-In the past, I have tried to find a service that would allow me to receive notifications whenever an rss feed gets new items. Most rss reader applications do not have such functionality and the few that do offer it as a paid service. Despite that, this is a fairly simple functionality to implement. In 2022, as a sophmore in college, I did it myself in Python. I was not a very good programmer back then; the code was messy, full of bad practices, difficult to understand, and had some bugs that proved very difficult to track down. This project is a from-the-ground-up rewrite of that original Python script which I intend to be significantly better, less error prone (and more resilient when encountering errors), and to generally be written with best practices in mind. I currently have it up and running on a Rasperry Pi 4 Model B.
+In the past, I have tried to find a service that would allow me to receive notifications whenever an rss feed gets new items. Most rss reader applications do not have such functionality and the few that do offer it as a paid service. Despite that, this is a fairly simple functionality to implement. In 2022, as a sophomore in college, I did it myself in Python. I was not a very good programmer back then; the code was messy, full of bad practices, difficult to understand, and had some bugs that proved very difficult to track down. This project is a from-the-ground-up rewrite of that original Python script which I intend to be significantly better, less error prone (and more resilient when encountering errors), and to generally be written with best practices in mind. I currently have it up and running on a Rasperry Pi 4 Model B.
 
 ## Building and Running
 1. This is a rust project, so you should have the rust toolchain installed. You can follow the official instructions [here](https://rust-lang.org/tools/install/).
@@ -10,6 +10,7 @@ In the past, I have tried to find a service that would allow me to receive notif
 3. Create a file with the rss links you’d like to track. The only rules are that it must be a valid rss feed and you must put only one feed url per line in the file. The file can be called whatever you want and be stored wherever you’d like on your system (more info in the next step).
 4. This project uses environment variables for all system-specific configurations and for storing secrets. There are six variables that must be present in a `.env` file in the same directory as the provided `exec_rss_notify.sh` script. A sample `.env` file is provided below:
 ```bash
+export RSS_NOTIFY_DB="/absolute/path/to/db/name.sql" # what you want your db to be called and where it should be stored
 export RSS_NOTIFY_FEED_LIST="/abolute/path/to/feed/list/from/step/three/feeds.rss" # where you are storing your feed file
 export RSS_NOTIFY_HISTORY_DIR="/absolute/path/to/wherever/you/want/feed/history/to/be/stored" # wherever you want the feed history to be stored
 export RSS_NOTIFY_BIN="/absolute/path/to/rss_notify/target/release/rss_notify" # the path to the compiled binary. If you followed step two, it will be inside the rss_notify dir as shown in this sample
@@ -30,8 +31,8 @@ export RUST_LOG="info" # optional, whatever logging level you want (trace, debug
 ### The program will enter an infinite loop where the following steps are repeated for every feed url:
 1. A GET request is made to the feed url, capturing its contents as bytes
 2. The byte content is converted into rss items. 
-3. If a feed has never been downloaded before, its history file is created with the current items and no more processing is done for the feed in the current loop.
-4. If a feed has an existing history file, the current contents are compared with the history. 
+3. If a feed has never been downloaded before, its DB entry with current feed contents is created and no more processing is done for the feed in the current loop.
+4. If a feed has an DB entry, the current feed contents are compared with the DB Entry.
 5. If any new items exist, a POST request is sent to the ntfy API to alert about the new item, sending the item title and url.
 ### Error handling
 If any of the steps mentioned above encounter an error, the program adds them to an error vector and will attempt to send a ntfy push containing information on the encountered errors. The set-it-and-forget-it nature of this script means we will largely avoid panics. Currently, the script only panics if env variables cannot be read, files or directories cannot be created, opened, or written to, or if an rss feed is unserializable.
@@ -65,13 +66,13 @@ If any of the steps mentioned above encounter an error, the program adds them to
 ## TODO
 Here is some of the work that I still want to do, in no particular order:
 1. Add the ability to track changes to websites in general, rather than just rss feeds.
-2. Start using `etag`s or the `last-modified` header to decide whether or not to pull down a feed's contents in the first place, rather than actually pulling down the whole thing every time.
-3. Switch to using a sqlite db instead of plain text for feed history storage.
+2. Start using `etag`s or the `last-modified` header to decide whether or not to pull down a feed's contents in the first place, rather than actually pulling down the whole thing every time. (SOON)
+3. Switch to using a sqlite db instead of plain text for feed history storage. (IN PROGRESSS)
 4. Possibly make the GET and POST requests async instead of blocking, though I’m not sure if the effort is worth it on this one.
 5. Implement unit, integration, and end-to-end tests for everything.
 6. Set a max size for the error vector. If the number of encountered, unalerted errors goes over the limit, just kill the program to avoid potentially using up the entirety of free ntfy push capacity once the error pushes are allowed to go through. Possibly also start tracking error rate over time and even if the error pushes go through, but an earlier step is erroring on every loop, then also end early.
 7. Set up a CI pipeline to enforce the linting and formatting rules specified in the above section.
 8. There are a few `panic!()`s that can probably be changed to more graceful error handling.
 9. `get_new_rss_items` can be broken up and made more modular.
-10. The feed history file names need a way to be more unique than they are now.
+10. The feed history file names need a way to be more unique than they are now. (SOON)
 11. Eventually, shift away from a third party service (ntfy) and create a basic Android shell app that leverages FCM to handle notifications.

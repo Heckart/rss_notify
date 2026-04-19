@@ -20,10 +20,7 @@ pub fn setup_db(db_name: &str) -> Connection {
     trace!("Inside setup_db.");
 
     let conn: Connection = match Connection::open(source_env_var(db_name)) {
-        Ok(connection) => {
-            debug!("Successfully connected to database.");
-            connection
-        }
+        Ok(connection) => connection,
         Err(err) => {
             error!("Could not setup database connection due to error: {err}.");
             panic!();
@@ -53,9 +50,7 @@ fn initialize_feed_table(conn: &Connection) {
         )",
         (),
     ) {
-        Ok(rc) => {
-            debug!("CREATE TABLE updated {}.", rc);
-        }
+        Ok(_) => {}
         Err(err) => {
             error!("CREATE TABLE responded with err {}.", err);
             panic!();
@@ -64,14 +59,14 @@ fn initialize_feed_table(conn: &Connection) {
 }
 
 /// **Purpose**:    Finds if a specific feed exists in the feed table
-/// **Parameters**: A &rusqlite::Connection for the database, a &str with a feed name
+/// **Parameters**: A &rusqlite::Connection for the database, a &String with a feed name
 /// **Ok Return**:  A boolean representing whether or not the feed is in the table
 /// **Err Return**: A rusqlite::Error from not being able to determine the existence of the feed
 /// **Panics**:     No
 /// **Modifies**:   Nothing
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
-pub fn feed_is_in_db(conn: &Connection, feed: &str) -> Result<bool, rusqlite::Error> {
+pub fn feed_is_in_db(conn: &Connection, feed: &String) -> Result<bool, rusqlite::Error> {
     trace!("Inside feed_is_in_db searching for existence of {}.", feed);
     match conn.query_one(
         "SELECT COUNT(1) 
@@ -152,10 +147,7 @@ pub fn get_feed_from_db(
         },
     ) {
         Ok(entry) => {
-            debug!(
-                "Grabbed entry with feed_name {}, feed_hist {}.",
-                entry.feed_name, entry.history
-            );
+            debug!("Grabbed entry with feed_name {}.", entry.feed_name);
             Ok(entry)
         }
         Err(err) => {

@@ -29,13 +29,13 @@ export RUST_LOG="info" # optional, whatever logging level you want (trace, debug
 
 ## Control Flow
 ### The program will enter an infinite loop where the following steps are repeated for every feed url:
-1. A GET request is made to the feed url, capturing its contents as bytes
-2. The byte content is converted into rss items. 
+1. A GET request is made to the feed url, capturing its contents as bytes.
+2. The byte content is converted into rss items.
 3. If a feed has never been downloaded before, its DB entry with current feed contents is created and no more processing is done for the feed in the current loop.
 4. If a feed has an DB entry, the current feed contents are compared with the DB Entry.
 5. If any new items exist, a POST request is sent to the ntfy API to alert about the new item, sending the item title and url.
 ### Error handling
-If any of the steps mentioned above encounter an error, the program adds them to an error vector and will attempt to send a ntfy push containing information on the encountered errors. The set-it-and-forget-it nature of this script means we will largely avoid panics. Currently, the script only panics if env variables cannot be read, files or directories cannot be created, opened, or written to, or if an rss feed is unserializable.
+If any of the steps mentioned above encounter an error, the program adds them to an error vector and will attempt to send a ntfy push containing information on the encountered errors. The set-it-and-forget-it nature of this script means we will largely avoid panics. Currently, the script only panics if env variables cannot be read, db connection can't be establish, table can't be created, or if an rss feed is unserializable.
 
 ## Styles and Standards
 ### General
@@ -67,12 +67,10 @@ If any of the steps mentioned above encounter an error, the program adds them to
 Here is some of the work that I still want to do, in no particular order:
 1. Add the ability to track changes to websites in general, rather than just rss feeds.
 2. Start using `etag`s or the `last-modified` header to decide whether or not to pull down a feed's contents in the first place, rather than actually pulling down the whole thing every time. (SOON)
-3. Switch to using a sqlite db instead of plain text for feed history storage. (IN PROGRESSS)
-4. Possibly make the GET and POST requests async instead of blocking, though I’m not sure if the effort is worth it on this one.
-5. Implement unit, integration, and end-to-end tests for everything.
-6. Set a max size for the error vector. If the number of encountered, unalerted errors goes over the limit, just kill the program to avoid potentially using up the entirety of free ntfy push capacity once the error pushes are allowed to go through. Possibly also start tracking error rate over time and even if the error pushes go through, but an earlier step is erroring on every loop, then also end early.
-7. Set up a CI pipeline to enforce the linting and formatting rules specified in the above section.
-8. There are a few `panic!()`s that can probably be changed to more graceful error handling.
-9. `get_new_rss_items` can be broken up and made more modular.
-10. The feed history file names need a way to be more unique than they are now. (SOON)
-11. Eventually, shift away from a third party service (ntfy) and create a basic Android shell app that leverages FCM to handle notifications.
+3. Possibly make the GET and POST requests async instead of blocking, though I’m not sure if the effort is worth it on this one.
+4. Implement unit, integration, and end-to-end tests for everything.
+5. Set a max size for the error vector. If the number of encountered, unalerted errors goes over the limit, just kill the program to avoid potentially using up the entirety of free ntfy push capacity once the error pushes are allowed to go through. Possibly also start tracking error rate over time and even if the error pushes go through, but an earlier step is erroring on every loop, then also end early.
+6. Set up a CI pipeline to enforce the linting and formatting rules specified in the above section.
+7. There are a few `panic!()`s that can probably be changed to more graceful error handling.
+8. `get_new_rss_items` can be broken up and made more modular.
+9. Eventually, shift away from a third party service (ntfy) and create a basic Android shell app that leverages FCM to handle notifications.

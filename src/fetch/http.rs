@@ -1,7 +1,7 @@
 use crate::database::{DBEntry, feed_is_in_db, insert_feed_to_db};
 use crate::parse::stringify_feed_bytes;
 use bytes::Bytes;
-use log::{error, trace};
+use log::{debug, error, trace};
 use reqwest::blocking::get;
 use rusqlite::Connection;
 use std::error;
@@ -35,7 +35,10 @@ pub fn fetch_feed_as_bytes(
                 // TODO: Request the feed-bytes making use of etag or last-modified headers if they
                 // exist
                 let feed_bytes: Bytes = match make_get_request(feed_url) {
-                    Ok(bytes) => bytes,
+                    Ok(bytes) => {
+                        trace!("Received feed bytes from {}.", feed_url);
+                        bytes
+                    }
                     Err(err) => {
                         return Err(err);
                     }
@@ -45,7 +48,10 @@ pub fn fetch_feed_as_bytes(
                 // its the first time we've seen the feed, so pull its headers+bytes, parse into db and
                 // return None, so we know to continue in the main function
                 let feed_bytes: Bytes = match make_get_request(feed_url) {
-                    Ok(bytes) => bytes,
+                    Ok(bytes) => {
+                        trace!("Received feed bytes from {}.", feed_url);
+                        bytes
+                    }
                     Err(err) => {
                         return Err(err);
                     }
@@ -59,7 +65,9 @@ pub fn fetch_feed_as_bytes(
                 };
 
                 match insert_feed_to_db(conn, new_row) {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        debug!("Inserted new row to DB for first feed encounter.");
+                    }
                     Err(err) => {
                         error!("Could not update DB row for {}.", feed_url);
                         return Err(Box::new(err));
@@ -84,7 +92,10 @@ pub fn fetch_feed_as_bytes(
 fn make_get_request(feed_url: &String) -> Result<Bytes, Box<dyn error::Error>> {
     match get(feed_url) {
         Ok(response) => match response.bytes() {
-            Ok(bytes) => Ok(bytes),
+            Ok(bytes) => {
+                trace!("GET request for {} successful.", feed_url);
+                Ok(bytes)
+            }
             Err(err) => {
                 error!("Conversion of Response to bytes for {} failed.", feed_url);
                 Err(Box::new(err))

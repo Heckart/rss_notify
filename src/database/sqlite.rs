@@ -1,5 +1,5 @@
 use crate::{database, env_setup::source_env_var};
-use log::{debug, error, trace, warn};
+use log::{debug, error, trace};
 use rusqlite::{Connection, params};
 
 pub struct DBEntry {
@@ -20,7 +20,10 @@ pub fn setup_db(db_name: &str) -> Connection {
     trace!("Inside setup_db.");
 
     let conn: Connection = match Connection::open(source_env_var(db_name)) {
-        Ok(connection) => connection,
+        Ok(connection) => {
+            debug!("{} DB connection established.", db_name);
+            connection
+        }
         Err(err) => {
             error!("Could not setup database connection due to error: {err}.");
             panic!();
@@ -50,7 +53,9 @@ fn initialize_feed_table(conn: &Connection) {
         )",
         (),
     ) {
-        Ok(_) => {}
+        Ok(_) => {
+            trace!("feed_hist table initialized.");
+        }
         Err(err) => {
             error!("CREATE TABLE responded with err {}.", err);
             panic!();
@@ -85,7 +90,7 @@ pub fn feed_is_in_db(conn: &Connection, feed: &String) -> Result<bool, rusqlite:
             }
         }
         Err(err) => {
-            warn!(
+            error!(
                 "Could not determine if {} is in feed_hist due to error: {}.",
                 feed, err
             );
@@ -116,28 +121,40 @@ pub fn get_feed_from_db(
         |row| {
             Ok(DBEntry {
                 feed_name: match row.get(0) {
-                    Ok(ok) => ok,
+                    Ok(ok) => {
+                        trace!("DB feed_name {} extracted.", ok);
+                        ok
+                    }
                     Err(err) => {
                         error!("Could not get feed_name row due to error: {}.", err);
                         return Err(err);
                     }
                 },
                 history: match row.get(1) {
-                    Ok(ok) => ok,
+                    Ok(ok) => {
+                        trace!("DB history extracted.");
+                        ok
+                    }
                     Err(err) => {
                         error!("Could not get history row due to error: {}.", err);
                         return Err(err);
                     }
                 },
                 last_modified: match row.get(2) {
-                    Ok(ok) => ok,
+                    Ok(ok) => {
+                        trace!("DB last_modified extracted.");
+                        ok
+                    }
                     Err(err) => {
                         error!("Could not get last_modified row due to error: {}.", err);
                         return Err(err);
                     }
                 },
                 etag: match row.get(3) {
-                    Ok(ok) => ok,
+                    Ok(ok) => {
+                        trace!("DB etag extracted.");
+                        ok
+                    }
                     Err(err) => {
                         error!("Could not get etag row due to error: {}.", err);
                         return Err(err);

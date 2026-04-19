@@ -22,7 +22,10 @@ pub fn get_new_rss_items(
 
     let db_feed_items: Vec<Item> = match get_feed_from_db(conn, feed_url) {
         Ok(response) => match serde_json::from_str(response.history.as_str()) {
-            Ok(items) => items,
+            Ok(items) => {
+                trace!("Successfully serialized {} rss items from DB.", feed_url);
+                items
+            }
             Err(err) => {
                 error!("Failed to turn DB feed history string into Vec<rss:Item>.");
                 return Err(Box::new(err));
@@ -35,7 +38,13 @@ pub fn get_new_rss_items(
     };
 
     let new_feed_channel: Channel = match Channel::read_from(&feed_bytes[..]) {
-        Ok(channel) => channel,
+        Ok(channel) => {
+            trace!(
+                "Successfully converted {} feed bytes into rss channel.",
+                feed_url
+            );
+            channel
+        }
         Err(err) => {
             error!("Failed to convert feed bytes to rss channel.");
             return Err(Box::new(err));
@@ -57,7 +66,9 @@ pub fn get_new_rss_items(
         // if we can't update here, we will find the changes from this iteration again next time
         // as it will still be comparing with the old DB data
         match insert_feed_to_db(conn, updated_row) {
-            Ok(_) => {}
+            Ok(_) => {
+                trace!("Sucessfully updated {} DB row", feed_url);
+            }
             Err(err) => {
                 error!("Could not update DB row for {}.", feed_url);
                 return Err(Box::new(err));
@@ -80,7 +91,10 @@ pub fn stringify_feed_bytes(feed_bytes: Bytes) -> String {
     trace!("Inside serialize_feed_bytes");
     let rss_channel: Channel = match Channel::read_from(&feed_bytes[..]) {
         // TODO Change to return errors
-        Ok(result) => result,
+        Ok(result) => {
+            trace!("Successfully converted feed bytes to rss_channel.");
+            result
+        }
         Err(err) => {
             error!(
                 "Couldn't convert bytes to rss Channel due to error: {}.",
@@ -93,7 +107,10 @@ pub fn stringify_feed_bytes(feed_bytes: Bytes) -> String {
     // issues with a date-dependent element changing from pull to pull.
     let serialized: String = match serde_json::to_string(&rss_channel.items().to_vec()) {
         // TODO This is a candidate to return the error
-        Ok(json) => json,
+        Ok(json) => {
+            trace!("Successfully stringified feed bytes.");
+            json
+        }
         Err(err) => {
             error!("Couldn't serialize item vector! {}", err);
             panic!();

@@ -2,7 +2,7 @@
 #![warn(clippy::all)]
 #![deny(warnings)]
 use bytes::Bytes;
-use log::{debug, info, trace, warn};
+use log::{debug, info, error, trace, warn};
 use reqwest::StatusCode;
 use reqwest::blocking::Response;
 use rss::Item;
@@ -54,8 +54,8 @@ fn main() {
             // get the feed contents from the url
             let feed_bytes: Bytes = match fetch_feed_as_bytes(&conn, &url.to_string()) {
                 Ok(bytes) => {
-                    debug!("Sourced feed bytes for {}.", url);
                     if bytes.is_some() {
+                        debug!("Sourced feed bytes for {}.", url);
                         // invariant
                         unsafe { bytes.unwrap_unchecked() }
                     } else {
@@ -68,7 +68,7 @@ fn main() {
                 }
                 Err(err) => {
                     let err_msg: String = construct_full_error(err);
-                    warn!(
+                    error!(
                         "fetch_feed_as_bytes: failed to fetch feed bytes: {}",
                         err_msg
                     );
@@ -87,7 +87,7 @@ fn main() {
                 }
                 Err(err) => {
                     let err_msg: String = construct_full_error(err);
-                    warn!(
+                    error!(
                         "get_new_rss_items: failed to get new rss items: {}",
                         err_msg
                     );
@@ -116,7 +116,7 @@ fn main() {
                             let body: String = ok.text().unwrap();
 
                             if status != StatusCode::OK {
-                                warn!("Ntfy gave non-OK response of {} for {}.", status, body);
+                                error!("Ntfy gave non-OK response of {} for {}.", status, body);
                                 errors.push(format!("The push {body} responded with {status}"));
                             } else {
                                 debug!(
@@ -127,7 +127,7 @@ fn main() {
                         }
                         Err(err) => {
                             let err_msg: String = construct_full_error(err);
-                            warn!(
+                            error!(
                                 "send_new_item_notification: Initial response had errors: {}.",
                                 err_msg
                             );
@@ -164,6 +164,7 @@ fn main() {
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
 fn construct_full_error(err: Box<dyn Error>) -> String {
+    trace!("Inside construct_full_error.");
     let mut err_message: String = format!("Encountered error: {err}");
     let mut current: &dyn Error = &err.deref();
     // not using write macro here so theres no unwrap or extra error handling
@@ -208,7 +209,7 @@ fn try_send_failure_notification(errors: &mut Vec<String>, new_error: Option<Str
         }
         Err(err) => {
             let err_msg: String = construct_full_error(err);
-            warn!("Attempt to send errors had errors {}.", err_msg);
+            error!("Attempt to send errors had errors {}.", err_msg);
             errors.push(err_msg);
             debug!("Total errors are {}.", errors.len());
         }

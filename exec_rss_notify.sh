@@ -15,6 +15,13 @@ else
 	pkill -f "${RSS_NOTIFY_BIN}" || true
 fi
 
+RSS_NOTIFY_DB_DIR="$(dirname "${RSS_NOTIFY_DB}")"
+
+if [[ ! -d "${RSS_NOTIFY_DB_DIR}" ]]; then
+	echo "Sqlite db dir does not exist, making it now."
+	mkdir -p "${RSS_NOTIFY_DB_DIR}"
+fi
+
 RSS_NOTIFY_LOG_DIR="$(dirname "${RSS_NOTIFY_LOG_FILE}")"
 
 if [[ ! -d "${RSS_NOTIFY_LOG_DIR}" ]]; then

@@ -4,3 +4,4 @@ pub mod env_setup;
 pub mod fetch;
 pub mod parse;
 pub mod push;
+pub mod database;

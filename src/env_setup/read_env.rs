@@ -1,4 +1,4 @@
-use log::{debug, error, trace};
+use log::{debug, trace};
 use std::env::var;
 use std::fs::File;
 use std::io::Read;
@@ -17,20 +17,23 @@ pub fn get_feed_list(feed_env_var: &str) -> Vec<String> {
     );
     // open the feed url file, specified by the env variable
     let mut feed_url_file: File = match File::open(source_env_var(feed_env_var)) {
-        Ok(file_name) => file_name,
+        Ok(file_name) => {
+            trace!("Opened feed url file.");
+            file_name
+        }
         Err(err) => {
-            error!("Could not open feed url file! {}", err);
-            panic!()
+            panic!("Could not open feed url file! {}.", err)
         }
     };
 
     // grab the txt contents of the feed url file
     let mut url_file_contents: String = String::new();
     match feed_url_file.read_to_string(&mut url_file_contents) {
-        Ok(_) => {}
+        Ok(_) => {
+            trace!("Read feed url file contents.");
+        }
         Err(err) => {
-            error!("Could not convert file contents to string! {}", err);
-            panic!()
+            panic!("Could not convert file contents to string! {}", err)
         }
     };
 
@@ -59,11 +62,7 @@ pub fn source_env_var(env_var: &str) -> String {
             var
         }
         Err(err) => {
-            error!(
-                "Could not source env variable! {}",
-                err
-            );
-            panic!();
+            panic!("Could not source env variable! {}", err);
         }
     };
 

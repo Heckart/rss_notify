@@ -12,7 +12,6 @@ In the past, I have tried to find a service that would allow me to receive notif
 ```bash
 export RSS_NOTIFY_DB="/absolute/path/to/db/name.sql" # what you want your db to be called and where it should be stored
 export RSS_NOTIFY_FEED_LIST="/abolute/path/to/feed/list/from/step/three/feeds.rss" # where you are storing your feed file
-export RSS_NOTIFY_HISTORY_DIR="/absolute/path/to/wherever/you/want/feed/history/to/be/stored" # wherever you want the feed history to be stored
 export RSS_NOTIFY_BIN="/absolute/path/to/rss_notify/target/release/rss_notify" # the path to the compiled binary. If you followed step two, it will be inside the rss_notify dir as shown in this sample
 cur_date=$(date +%Y%m%d%H%M%S) # optional, just used to put the date in log files
 export RSS_NOTIFY_LOG_FILE="/absolute/path/to/where/you/want/rss_notify_log_${cur_date}.log" # wherever you want your log files stored and the naming convention for the individual log files

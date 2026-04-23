@@ -1,14 +1,15 @@
 use crate::database::{DBEntry, get_feed_from_db, insert_feed_to_db};
 use bytes::Bytes;
-use log::{error, trace};
-use rss::{Channel, Item};
+use log::{error, trace, warn};
+use rss::{Channel, Item, ItemBuilder};
 use rusqlite::Connection;
 use std::error;
 
 /// **Purpose**:    Grab new items from an rss feed and maintains DB feed history
 /// **Parameters**: A &rusqlite:Connection of the history db, a &String of the feed url, A Bytes object of rss content
 /// **Ok Return**:  A Vec<rss::Item> of previously unseen rss content
-/// **Err Return**: A rss::Error from failure to serialize a rss::Channel
+/// **Err Return**: A Box<dyn error::Error> from failure to serialize feed, failure to get feed
+///                 bytes, or failure to access the DB
 /// **Panics**:     No
 /// **Modifies**:   If new rss::Items are found, updates the DB row for the feed
 /// **Tests**:      Not implemented yet
@@ -57,7 +58,16 @@ pub fn get_new_rss_items(
     if !new_items.is_empty() {
         let updated_row: DBEntry = DBEntry {
             feed_name: feed_url.clone(),
-            history: stringify_feed_bytes(feed_bytes),
+            history: match stringify_feed_bytes(feed_bytes) {
+                Ok(feed_hist) => {
+                    trace!("Successfully stringified feed bytes for insertion to DB");
+                    feed_hist
+                }
+                Err(err) => {
+                    error!("Could not stringify feed bytes for insertion to DB");
+                    return Err(err);
+                }
+            },
             last_modified: None,
             etag: None,
         };
@@ -79,45 +89,79 @@ pub fn get_new_rss_items(
     Ok(new_items)
 }
 
-/// **Purpose**:    Serialize a Bytes object into a String
+/// **Purpose**:    Serialize a Bytes object of rss content into a String with only title and link
+///                 taken from each rss item
 /// **Parameters**: A Bytes object of rss content
-/// **Return**:     A String of rss content
-/// **Panics**:     If conversion of Bytes to rss Channel or rss Channel to String fails
+/// **Ok Return**:  A String of rss content
+/// **Err Return**: A Box<dyn error::Error) if bytes cannot be converted to rss channel or rss::Item
+///                 vector can't be serialized
+/// **Panics**:     No
 /// **Modifies**:   Nothing
 /// **Tests**:      Not implemented yet
-/// **Status**:     Completed, but need to change to return errors and change to only serialize urls
-/// and titles instead of the whole item
-pub fn stringify_feed_bytes(feed_bytes: Bytes) -> String {
+/// **Status**:     Done
+pub fn stringify_feed_bytes(feed_bytes: Bytes) -> Result<String, Box<dyn error::Error>> {
     trace!("Inside serialize_feed_bytes");
     let rss_channel: Channel = match Channel::read_from(&feed_bytes[..]) {
-        // TODO Change to return errors
         Ok(result) => {
             trace!("Successfully converted feed bytes to rss_channel.");
-            result
+            let mut new_channel: Channel = result;
+            let mut new_items: Vec<Item> = Vec::new();
+            // we only serialize the url and article title to avoid false "new item" reports. The article
+            // body could contain date-specific elements that change from pull to pull to pull
+            for item in new_channel.items {
+                let item_title: &str = match item.title() {
+                    Some(title) => {
+                        trace!("Item had title {}", title);
+                        title
+                    }
+                    None => {
+                        warn!("Item had no title, inserting as 'N/A'.");
+                        "N/A"
+                    }
+                };
+                let item_link: &str = match item.link() {
+                    Some(link) => {
+                        trace!("Item had link {}", link);
+                        link
+                    }
+                    None => {
+                        warn!("Item had no link, inserting as 'N/A'.");
+                        "N/A"
+                    }
+                };
+                new_items.push(
+                    ItemBuilder::default()
+                        .title(Some(item_title.to_string()))
+                        .link(Some(item_link.to_string()))
+                        .build(),
+                );
+            }
+
+            new_channel.items = new_items;
+            new_channel
         }
         Err(err) => {
             error!(
                 "Couldn't convert bytes to rss Channel due to error: {}.",
                 err
             );
-            panic!();
+            return Err(Box::new(err));
         }
     };
-    // I am concerend about serializing the whole item because the description tag may have
-    // issues with a date-dependent element changing from pull to pull.
+
     let serialized: String = match serde_json::to_string(&rss_channel.items().to_vec()) {
-        // TODO This is a candidate to return the error
         Ok(json) => {
             trace!("Successfully stringified feed bytes.");
             json
         }
         Err(err) => {
             error!("Couldn't serialize item vector! {}", err);
-            panic!();
+            return Err(Box::new(err));
         }
     };
 
-    serialized
+    println!("new method serialized: {}", serialized);
+    Ok(serialized)
 }
 
 /// **Purpose**:    Constructs a vector of previously unseen rss content

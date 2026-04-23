@@ -59,7 +59,16 @@ pub fn fetch_feed_as_bytes(
 
                 let new_row: DBEntry = DBEntry {
                     feed_name: feed_url.to_string(),
-                    history: stringify_feed_bytes(feed_bytes),
+                    history: match stringify_feed_bytes(feed_bytes) {
+                        Ok(feed_history) => {
+                            trace!("Received rss feed history string.");
+                            feed_history
+                        }
+                        Err(err) => {
+                            error!("Could not update DB feed history.");
+                            return Err(err);
+                        }
+                    },
                     last_modified: None,
                     etag: None,
                 };

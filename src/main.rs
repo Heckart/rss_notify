@@ -2,7 +2,7 @@
 #![warn(clippy::all)]
 #![deny(warnings)]
 use bytes::Bytes;
-use log::{debug, info, error, trace, warn};
+use log::{debug, info, error, trace};
 use reqwest::StatusCode;
 use reqwest::blocking::Response;
 use rss::Item;

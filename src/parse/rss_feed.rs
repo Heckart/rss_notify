@@ -44,7 +44,7 @@ pub fn get_new_rss_items(
                 "Successfully converted {} feed bytes into rss channel.",
                 feed_url
             );
-            channel
+            normalize_rss_items_in_channel(channel)
         }
         Err(err) => {
             error!("Failed to convert feed bytes to rss channel.");
@@ -104,41 +104,7 @@ pub fn stringify_feed_bytes(feed_bytes: Bytes) -> Result<String, Box<dyn error::
     let rss_channel: Channel = match Channel::read_from(&feed_bytes[..]) {
         Ok(result) => {
             trace!("Successfully converted feed bytes to rss_channel.");
-            let mut new_channel: Channel = result;
-            let mut new_items: Vec<Item> = Vec::new();
-            // we only serialize the url and article title to avoid false "new item" reports. The article
-            // body could contain date-specific elements that change from pull to pull to pull
-            for item in new_channel.items {
-                let item_title: &str = match item.title() {
-                    Some(title) => {
-                        trace!("Item had title {}", title);
-                        title
-                    }
-                    None => {
-                        warn!("Item had no title, inserting as 'N/A'.");
-                        "N/A"
-                    }
-                };
-                let item_link: &str = match item.link() {
-                    Some(link) => {
-                        trace!("Item had link {}", link);
-                        link
-                    }
-                    None => {
-                        warn!("Item had no link, inserting as 'N/A'.");
-                        "N/A"
-                    }
-                };
-                new_items.push(
-                    ItemBuilder::default()
-                        .title(Some(item_title.to_string()))
-                        .link(Some(item_link.to_string()))
-                        .build(),
-                );
-            }
-
-            new_channel.items = new_items;
-            new_channel
+            normalize_rss_items_in_channel(result)
         }
         Err(err) => {
             error!(
@@ -162,6 +128,53 @@ pub fn stringify_feed_bytes(feed_bytes: Bytes) -> Result<String, Box<dyn error::
 
     println!("new method serialized: {}", serialized);
     Ok(serialized)
+}
+
+/// **Purpose**:    Normalize the Items in an rss::Channel to only include title and link. All other
+///                 fields become null
+/// **Parameters**: A rss::Channel
+/// **Return**:     A rss::Channel with its Items normalized
+/// **Panics**:     No
+/// **Modifies**:   The Item vector of the rss::Channel
+/// **Tests**:      Not implemented yet
+/// **Status**:     Done
+fn normalize_rss_items_in_channel(channel: Channel) -> Channel {
+    trace!("Inside normalize_rss_items_in_channel.");
+    let mut normalized_channel: Channel = channel;
+    let mut new_items: Vec<Item> = Vec::new();
+    // we only serialize the url and article title to avoid false "new item" reports. The article
+    // body could contain date-specific elements that change from pull to pull to pull
+    for item in normalized_channel.items {
+        let item_title: &str = match item.title() {
+            Some(title) => {
+                trace!("Item had title {}", title);
+                title
+            }
+            None => {
+                warn!("Item had no title, inserting as 'N/A'.");
+                "N/A"
+            }
+        };
+        let item_link: &str = match item.link() {
+            Some(link) => {
+                trace!("Item had link {}", link);
+                link
+            }
+            None => {
+                warn!("Item had no link, inserting as 'N/A'.");
+                "N/A"
+            }
+        };
+        new_items.push(
+            ItemBuilder::default()
+                .title(Some(item_title.to_string()))
+                .link(Some(item_link.to_string()))
+                .build(),
+        );
+    }
+
+    normalized_channel.items = new_items;
+    normalized_channel
 }
 
 /// **Purpose**:    Constructs a vector of previously unseen rss content

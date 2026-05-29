@@ -20,7 +20,7 @@ export NTFY_TOPIC="sampleTopic" # the ntfy topic you want to publish new rss ite
 export RUST_LOG="info" # optional, whatever logging level you want (trace, debug, info, warn, error)
 ```
 5. As mentioned in the sample `.env` file, [ntfy](https://docs.ntfy.sh/) is used for the push notifications. You will be able to send 250 pushes per day on the public API. This project originally used Pushbullet, but was switched to ntfy because ntfy is open source and has *significantly* higher usage limits.
-6. You’re ready to run rss notify! I suggest running the provided `exec_rss_notify.sh` orchestrator script to do this, as it will automatically handle things like log creation and cleanup for you. You will not receive any notifications at first, as the first time a is read its history is only saved, but if you keep the program running (or kill it and start it up later without deleting the feed hist) as a new item makes it to the feed, you will get a ntfy notification from rss notify. You can install the ntfy client to your computer or phone.
+6. You’re ready to run rss notify! I suggest running the provided `exec_rss_notify.sh` orchestrator script to do this, as it will automatically handle things like log creation and cleanup for you. You will not receive any notifications at first, as the first time a feed is read, its history is only saved, but if you keep the program running (or kill it and start it up later without deleting the database) as a new item makes it to the feed, you will get a ntfy notification from rss notify.
 7. Right now, rss notify is intended to be run in the background via cron so that it is always keeping up to date with the state of your tracked feeds, without needing any manual interventions. `exec_rss_notify.sh` will kill all other running instances of rss notify when it run, so I am currently using this cron schedule, which will fire once per day at midnight:
 ```cron
 0 0 * * * /absolute/path/to/rss_notify/exec_rss_notify.sh >> /absolute/path/to/rss_notify/logs/exec_rss_notify$(date +\%Y\%m\%d\%H\%M\%S).cron
@@ -30,7 +30,7 @@ export RUST_LOG="info" # optional, whatever logging level you want (trace, debug
 ### The program will enter an infinite loop where the following steps are repeated for every feed url:
 1. A GET request is made to the feed url, capturing its contents as bytes.
 2. The byte content is converted into rss items.
-3. If a feed has never been downloaded before, its DB entry with current feed contents is created and no more processing is done for the feed in the current loop.
+3. If a feed has never been downloaded before, its DB entry with current feed contents + headers is created and no more processing is done for the feed in the current loop.
 4. If a feed has an DB entry, the current feed contents are compared with the DB Entry.
 5. If any new items exist, a POST request is sent to the ntfy API to alert about the new item, sending the item title and url.
 ### Error handling
@@ -61,15 +61,18 @@ If any of the steps mentioned above encounter an error, the program adds them to
 ```
 4. Use `use` statements to the largest extent possible.
 5. Code should be formatted with [rustfmt](https://github.com/rust-lang/rustfmt).
+6. The current style uses `match`es extensively and has highly explicit error handling + verbose logging. This is decidedly *not* idiomatic Rust style, but was a conscious choice. In my opinion it makes debugging easier and being able to read the log statements thoughout the codebase has a similar effect to the code being well commented.
 
 ## TODO
 Here is some of the work that I still want to do, in no particular order:
 1. Add the ability to track changes to websites in general, rather than just rss feeds.
-2. Start using `etag`s or the `last-modified` header to decide whether or not to pull down a feed's contents in the first place, rather than actually pulling down the whole thing every time. (SOON)
-3. Possibly make the GET and POST requests async instead of blocking, though I’m not sure if the effort is worth it on this one.
-4. Implement unit, integration, and end-to-end tests for everything.
-5. Set a max size for the error vector. If the number of encountered, unalerted errors goes over the limit, just kill the program to avoid potentially using up the entirety of free ntfy push capacity once the error pushes are allowed to go through. Possibly also start tracking error rate over time and even if the error pushes go through, but an earlier step is erroring on every loop, then also end early.
-6. Set up a CI pipeline to enforce the linting and formatting rules specified in the above section.
-7. There are a few `panic!()`s that can probably be changed to more graceful error handling.
-8. `get_new_rss_items` can be broken up and made more modular.
-9. Eventually, shift away from a third party service (ntfy) and create a basic Android shell app that leverages FCM to handle notifications.
+2. Possibly make the GET and POST requests async instead of blocking, though I’m not sure if the effort is worth it on this one.
+3. Implement unit, integration, and end-to-end tests for everything.
+4. Set a max size for the error vector. If the number of encountered, unalerted errors goes over the limit, just kill the program to avoid potentially using up the entirety of free ntfy push capacity once the error pushes are allowed to go through. Possibly also start tracking error rate over time and even if the error pushes go through, but an earlier step is erroring on every loop, then also end early.
+5. Set up a CI pipeline to enforce the linting and formatting rules specified in the above section.
+6. There are a few `panic!()`s that can probably be changed to more graceful error handling.
+7. Change the feed list from being raw text to a structured config file + on a per feed basis, allow the specification of "blacklisted" article titles that are skipped from being alerted on (useful if a feed freqeuntly posts deuplicate items).
+8. Set up a podman container to serve as a standard environment for running the binary, rather than running on bare-metal.
+9. Let the bash orchestrator walk through first time env setup if it determines the .env file is missing required variables.
+10. Maybe have errors get pushed to a separate ntfy topic from the topic used for feed changes.
+11. Eventually, shift away from a third party service (ntfy) and create a basic Android shell app that leverages FCM to handle notifications.

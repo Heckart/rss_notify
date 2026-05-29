@@ -11,7 +11,7 @@ use std::error;
 /// **Err Return**: A Box<dyn error::Error> from failure to serialize feed, failure to get feed
 ///                 bytes, or failure to access the DB
 /// **Panics**:     No
-/// **Modifies**:   If new rss::Items are found, updates the DB row for the feed
+/// **Modifies**:   If new rss::Items are found, updates the DB history for the feed
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
 pub fn get_new_rss_items(
@@ -22,7 +22,12 @@ pub fn get_new_rss_items(
     trace!("Inside get_new_rss_items.");
 
     let db_feed_items: Vec<Item> = match get_feed_from_db(conn, feed_url) {
-        Ok(response) => match serde_json::from_str(response.history.as_str()) {
+        Ok(response) => match serde_json::from_str(
+            response
+                .history
+                .expect("DB invariant violation: history must be NOT NULL.")
+                .as_str(),
+        ) {
             Ok(items) => {
                 trace!("Successfully serialized {} rss items from DB.", feed_url);
                 items
@@ -61,7 +66,7 @@ pub fn get_new_rss_items(
             history: match stringify_feed_bytes(feed_bytes) {
                 Ok(feed_hist) => {
                     trace!("Successfully stringified feed bytes for insertion to DB");
-                    feed_hist
+                    Some(feed_hist)
                 }
                 Err(err) => {
                     error!("Could not stringify feed bytes for insertion to DB");

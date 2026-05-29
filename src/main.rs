@@ -32,8 +32,7 @@ use std::time::Duration;
 /// **Modifies**:   Nothing
 /// **Tests**:      Not implemented yet
 /// **Status**:     Add support for tracking website changes in addition to rss feed changes,
-///                 maybe transition program from blocking to async, use If-Modified-Since to avoid
-///                 downloading whole feed if unnecessary, use a sqlite db instead of txt files
+///                 maybe transition program from blocking to async
 fn main() {
     env_logger::init();
     trace!("Starting up!");
@@ -150,7 +149,7 @@ fn main() {
                 try_send_failure_notification(&mut errors, None);
             }
         }
-        // be nice an wait 5 minutes between updating feeds
+        // TODO: this can probably be reduced now that we respsect headers
         debug!("Sleeping for 5 mintes before looping again.");
         sleep(Duration::from_mins(5));
     }

@@ -27,7 +27,13 @@ rpath = false
 [package]
 name = "rss_notify"
 version = "0.2.0"
+authors = ["Ethan Heckart"]
 edition = "2024"
+description = "RSS feed watcher; send push notifications whenever a feed has new items"
+readme = "README.md"
+repository = "https://github.com/Heckart/rss_notify"
+license = "BSD 3-Clause"
+keywords = ["rss", "alert", "notification"]
 
 [dependencies]
 reqwest = { version = "0.12.28", features = ["json", "gzip", "blocking", "rustls-tls"] }

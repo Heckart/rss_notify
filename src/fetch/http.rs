@@ -29,7 +29,7 @@ pub fn fetch_feed_as_bytes(
     conn: &Connection,
     feed_url: &String,
 ) -> Result<Option<Bytes>, Box<dyn error::Error>> {
-    trace!("Inside fetch_feed_as_bytes with feed_url of {}.", feed_url);
+    trace!("Inside fetch_feed_as_bytes with feed_url of {feed_url}.");
 
     let feed_response: ResponseDetails;
 
@@ -40,11 +40,11 @@ pub fn fetch_feed_as_bytes(
                 // upon the existing header contents if there are any
                 feed_response = match get_existing_feed(conn, feed_url) {
                     Ok(url_response) => {
-                        trace!("GET routine for existing feed {} successful.", feed_url);
+                        trace!("GET routine for existing feed {feed_url} successful.");
                         url_response
                     }
                     Err(err) => {
-                        error!("GET routine for existing feed {} failed.", feed_url);
+                        error!("GET routine for existing feed {feed_url} failed.");
                         return Err(err);
                     }
                 };
@@ -53,18 +53,18 @@ pub fn fetch_feed_as_bytes(
                 // return None, so we know to continue in the main function
                 feed_response = match make_get_request(feed_url, None) {
                     Ok(url_response) => {
-                        trace!("GET routine for new feed {} successful.", feed_url);
+                        trace!("GET routine for new feed {feed_url} successful.");
                         url_response
                     }
                     Err(err) => {
-                        error!("GET routine for new  feed {} failed.", feed_url);
+                        error!("GET routine for new  feed {feed_url} failed.");
                         return Err(err);
                     }
                 };
             }
         }
         Err(err) => return Err(Box::new(err)),
-    };
+    }
 
     let mut returned_feed_bytes: Option<Bytes> = None;
 
@@ -85,13 +85,13 @@ pub fn fetch_feed_as_bytes(
             feed_response.last_modified,
         ) {
             Ok(_) => {
-                trace!("Successful update to DB for {}.", feed_url);
+                trace!("Successful update to DB for {feed_url}.");
             }
             Err(err) => {
-                error!("Could not update DB for {}.", feed_url);
+                error!("Could not update DB for {feed_url}.");
                 return Err(err);
             }
-        };
+        }
     }
 
     Ok(returned_feed_bytes)
@@ -116,22 +116,22 @@ fn make_get_request(
 
     let request_result: Result<Response, reqwest::Error>;
 
-    let first_time_seeing_feed: bool; // tracking purposes in fetch_feed_as_bytes(), makes that function simpler
-    if let Some(get_request) = get_client {
+// tracking purposes in fetch_feed_as_bytes(), makes that function simpler 
+    let first_time_seeing_feed: bool = if let Some(get_request) = get_client {
         request_result = RequestBuilder::send(get_request);
-        first_time_seeing_feed = false
+        false
     } else {
         request_result = get(feed_url);
-        first_time_seeing_feed = true
-    }
+        true
+    };
 
     let response: Response = match request_result {
         Ok(url_response) => {
-            trace!("GET request for {} successful.", feed_url);
+            trace!("GET request for {feed_url} successful.");
             url_response
         }
         Err(err) => {
-            error!("GET request for {} failed.", feed_url);
+            error!("GET request for {feed_url} failed.");
             return Err(Box::new(err));
         }
     };
@@ -142,8 +142,7 @@ fn make_get_request(
     match response.status() {
         StatusCode::NOT_MODIFIED => {
             debug!(
-                "GET request for {} had matching headers! Assuming no change to feed contents.",
-                feed_url
+                "GET request for {feed_url} had matching headers! Assuming no change to feed contents."
             );
             //TODO: Can probably still update headers?
             response_etag = None;
@@ -152,10 +151,7 @@ fn make_get_request(
         }
         StatusCode::OK => {
             // full request was made
-            debug!(
-                "Full GET request made for {}! Assuming new feed contents.",
-                feed_url
-            );
+            debug!("Full GET request made for {feed_url}! Assuming new feed contents.");
             //TODO: These two are supressing errors with ok(), so at some point make the errors explicit
             response_etag = response
                 .headers()
@@ -182,8 +178,7 @@ fn make_get_request(
         }
         other_rc => {
             warn!(
-                "GET request for {} had unexpected status code {}! Not sure what happened, so doing nothing.",
-                feed_url, other_rc
+                "GET request for {feed_url} had unexpected status code {other_rc}! Not sure what happened, so doing nothing."
             );
             // Don't update the headers here. We may have missed content and want to grab it next time.
             response_etag = None;
@@ -216,14 +211,11 @@ fn get_existing_feed(
     trace!("Inside get_existing_feed().");
     let existing_db_entry: DBEntry = match get_feed_from_db(conn, feed_url) {
         Ok(db_row) => {
-            trace!("Successfully sourced existing DB entry for {}.", feed_url);
+            trace!("Successfully sourced existing DB entry for {feed_url}.");
             db_row
         }
         Err(err) => {
-            error!(
-                "Could not successfully source existing DB entry for {}.",
-                feed_url
-            );
+            error!("Could not successfully source existing DB entry for {feed_url}.");
             return Err(Box::new(err));
         }
     };
@@ -263,14 +255,14 @@ fn update_db_with_new_feed_info(
     trace!("Inside update_db_with_new_feed_info().");
 
     let mut new_row: DBEntry = DBEntry {
-        feed_name: feed_url.to_string(),
+        feed_name: feed_url.clone(),
         history: None,
         last_modified: feed_last_modified,
         etag: feed_etag,
     };
 
     if let Some(new_bytes) = feed_bytes {
-        new_row.history = match stringify_feed_bytes(new_bytes) {
+        new_row.history = match stringify_feed_bytes(&new_bytes) {
             Ok(feed_history) => {
                 trace!("Received rss feed history string.");
                 Some(feed_history)
@@ -282,13 +274,13 @@ fn update_db_with_new_feed_info(
         }
     }
 
-    match insert_feed_to_db(conn, new_row) {
+    match insert_feed_to_db(conn, &new_row) {
         Ok(rc) => {
-            debug!("DB responded with {} after insert for {}.", rc, feed_url);
+            debug!("DB responded with {rc} after insert for {feed_url}.");
             Ok(rc)
         }
         Err(err) => {
-            error!("Could not update DB row for {}.", feed_url);
+            error!("Could not update DB row for {feed_url}.");
             Err(Box::new(err))
         }
     }

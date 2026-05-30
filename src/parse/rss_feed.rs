@@ -17,7 +17,7 @@ use std::error;
 pub fn get_new_rss_items(
     conn: &Connection,
     feed_url: &String,
-    feed_bytes: Bytes,
+    feed_bytes: &Bytes,
 ) -> Result<Vec<Item>, Box<dyn error::Error>> {
     trace!("Inside get_new_rss_items.");
 
@@ -29,7 +29,7 @@ pub fn get_new_rss_items(
                 .as_str(),
         ) {
             Ok(items) => {
-                trace!("Successfully serialized {} rss items from DB.", feed_url);
+                trace!("Successfully serialized {feed_url} rss items from DB.");
                 items
             }
             Err(err) => {
@@ -38,17 +38,14 @@ pub fn get_new_rss_items(
             }
         },
         Err(err) => {
-            error!("Failed to get {} row from DB.", feed_url);
+            error!("Failed to get {feed_url} row from DB.");
             return Err(Box::new(err));
         }
     };
 
     let new_feed_channel: Channel = match Channel::read_from(&feed_bytes[..]) {
         Ok(channel) => {
-            trace!(
-                "Successfully converted {} feed bytes into rss channel.",
-                feed_url
-            );
+            trace!("Successfully converted {feed_url} feed bytes into rss channel.");
             normalize_rss_items_in_channel(channel)
         }
         Err(err) => {
@@ -57,7 +54,7 @@ pub fn get_new_rss_items(
         }
     };
 
-    let new_items: Vec<Item> = make_new_item_vector(db_feed_items, new_feed_channel.clone());
+    let new_items: Vec<Item> = make_new_item_vector(&db_feed_items, &new_feed_channel);
 
     // if there are differences, update db row and return the new items
     if !new_items.is_empty() {
@@ -80,12 +77,12 @@ pub fn get_new_rss_items(
         // technically we don't have to return the error here, but it makes more sense to.
         // if we can't update here, we will find the changes from this iteration again next time
         // as it will still be comparing with the old DB data
-        match insert_feed_to_db(conn, updated_row) {
+        match insert_feed_to_db(conn, &updated_row) {
             Ok(_) => {
-                trace!("Sucessfully updated {} DB row", feed_url);
+                trace!("Sucessfully updated {feed_url} DB row");
             }
             Err(err) => {
-                error!("Could not update DB row for {}.", feed_url);
+                error!("Could not update DB row for {feed_url}.");
                 return Err(Box::new(err));
             }
         }
@@ -104,7 +101,7 @@ pub fn get_new_rss_items(
 /// **Modifies**:   Nothing
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
-pub fn stringify_feed_bytes(feed_bytes: Bytes) -> Result<String, Box<dyn error::Error>> {
+pub fn stringify_feed_bytes(feed_bytes: &Bytes) -> Result<String, Box<dyn error::Error>> {
     trace!("Inside serialize_feed_bytes");
     let rss_channel: Channel = match Channel::read_from(&feed_bytes[..]) {
         Ok(result) => {
@@ -112,10 +109,7 @@ pub fn stringify_feed_bytes(feed_bytes: Bytes) -> Result<String, Box<dyn error::
             normalize_rss_items_in_channel(result)
         }
         Err(err) => {
-            error!(
-                "Couldn't convert bytes to rss Channel due to error: {}.",
-                err
-            );
+            error!("Couldn't convert bytes to rss Channel due to error: {err}.");
             return Err(Box::new(err));
         }
     };
@@ -126,12 +120,12 @@ pub fn stringify_feed_bytes(feed_bytes: Bytes) -> Result<String, Box<dyn error::
             json
         }
         Err(err) => {
-            error!("Couldn't serialize item vector! {}", err);
+            error!("Couldn't serialize item vector! {err}");
             return Err(Box::new(err));
         }
     };
 
-    println!("new method serialized: {}", serialized);
+    println!("new method serialized: {serialized}");
     Ok(serialized)
 }
 
@@ -150,26 +144,28 @@ fn normalize_rss_items_in_channel(channel: Channel) -> Channel {
     // we only serialize the url and article title to avoid false "new item" reports. The article
     // body could contain date-specific elements that change from pull to pull to pull
     for item in normalized_channel.items {
-        let item_title: &str = match item.title() {
-            Some(title) => {
-                trace!("Item had title {}", title);
-                title
-            }
-            None => {
+        let item_title: &str = item.title().map_or_else(
+            || {
                 warn!("Item had no title, inserting as 'N/A'.");
                 "N/A"
-            }
-        };
-        let item_link: &str = match item.link() {
-            Some(link) => {
-                trace!("Item had link {}", link);
-                link
-            }
-            None => {
+            },
+            |title| {
+                trace!("Item had title {title}");
+                title
+            },
+        );
+
+        let item_link: &str = item.link().map_or_else(
+            || {
                 warn!("Item had no link, inserting as 'N/A'.");
                 "N/A"
-            }
-        };
+            },
+            |link| {
+                trace!("Item had link {link}");
+                link
+            },
+        );
+
         new_items.push(
             ItemBuilder::default()
                 .title(Some(item_title.to_string()))
@@ -190,7 +186,7 @@ fn normalize_rss_items_in_channel(channel: Channel) -> Channel {
 /// **Modifies**:   Nothing
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
-fn make_new_item_vector(old_items: Vec<Item>, new_channel: Channel) -> Vec<Item> {
+fn make_new_item_vector(old_items: &[Item], new_channel: &Channel) -> Vec<Item> {
     trace!(
         "Inside make_new_item_vector with {} old_items.",
         old_items.len()
@@ -198,7 +194,7 @@ fn make_new_item_vector(old_items: Vec<Item>, new_channel: Channel) -> Vec<Item>
 
     let mut new_items: Vec<Item> = Vec::new();
 
-    for item in new_channel.items().iter() {
+    for item in new_channel.items() {
         if !old_items.contains(item) {
             new_items.push(item.clone());
         }
@@ -214,27 +210,27 @@ fn make_new_item_vector(old_items: Vec<Item>, new_channel: Channel) -> Vec<Item>
 /// **Modifies**:   Nothing
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
-pub fn print_serialized_rss(items: Vec<Item>) {
+pub fn print_serialized_rss(items: &[Item]) {
     trace!("Inside print_serialized_rss with  {} items.", items.len());
     if !items.is_empty() {
-        for item in items.iter() {
+        for item in items {
             if let Some(thing) = item.title() {
-                println!("TITLE IS: {}", thing);
+                println!("TITLE IS: {thing}");
             }
             if let Some(thing) = item.link() {
-                println!("LINK IS: {}", thing);
+                println!("LINK IS: {thing}");
             }
             if let Some(thing) = item.description() {
-                println!("DESC IS: {}", thing);
+                println!("DESC IS: {thing}");
             }
             if let Some(thing) = item.author() {
-                println!("AUTHOR IS: {}", thing);
+                println!("AUTHOR IS: {thing}");
             }
             if !item.categories().is_empty() {
-                for category in item.categories().iter() {
+                for category in item.categories() {
                     println!("CATEGORY NAME IS: {}", category.name());
                     if let Some(thing) = category.domain() {
-                        println!("CATEGORY DOMAIN IS: {}", thing);
+                        println!("CATEGORY DOMAIN IS: {thing}");
                     }
                 }
             }
@@ -255,13 +251,13 @@ pub fn print_serialized_rss(items: Vec<Item>) {
                 }
             }
             if let Some(thing) = item.comments() {
-                println!("COMMENTS IS: {}", thing);
+                println!("COMMENTS IS: {thing}");
             }
             if let Some(thing) = item.pub_date() {
-                println!("PUB DATE IS: {}", thing);
+                println!("PUB DATE IS: {thing}");
             }
             if let Some(thing) = item.content() {
-                println!("CONTENT IS: {}", thing);
+                println!("CONTENT IS: {thing}");
             }
         }
     }

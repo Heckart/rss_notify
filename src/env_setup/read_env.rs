@@ -11,10 +11,7 @@ use std::io::Read;
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
 pub fn get_feed_list(feed_env_var: &str) -> Vec<String> {
-    trace!(
-        "Inside get_feed_list with feed_env_var as {}.",
-        feed_env_var
-    );
+    trace!("Inside get_feed_list with feed_env_var as {feed_env_var}.");
     // open the feed url file, specified by the env variable
     let mut feed_url_file: File = match File::open(source_env_var(feed_env_var)) {
         Ok(file_name) => {
@@ -22,7 +19,7 @@ pub fn get_feed_list(feed_env_var: &str) -> Vec<String> {
             file_name
         }
         Err(err) => {
-            panic!("Could not open feed url file! {}.", err)
+            panic!("Could not open feed url file! {err}.")
         }
     };
 
@@ -33,9 +30,9 @@ pub fn get_feed_list(feed_env_var: &str) -> Vec<String> {
             trace!("Read feed url file contents.");
         }
         Err(err) => {
-            panic!("Could not convert file contents to string! {}", err)
+            panic!("Could not convert file contents to string! {err}.");
         }
-    };
+    }
 
     // construct a vector of all the urls
     let url_list: Vec<String> = url_file_contents
@@ -55,14 +52,14 @@ pub fn get_feed_list(feed_env_var: &str) -> Vec<String> {
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
 pub fn source_env_var(env_var: &str) -> String {
-    trace!("Inside source_env_var with env_var as {}.", env_var);
+    trace!("Inside source_env_var with env_var as {env_var}.");
     let env_var_content: String = match var(env_var) {
         Ok(var) => {
-            debug!("Sourced {} as {}.", env_var, var);
+            debug!("Sourced {env_var} as {var}.");
             var
         }
         Err(err) => {
-            panic!("Could not source env variable! {}", err);
+            panic!("Could not source env variable! {err}");
         }
     };
 

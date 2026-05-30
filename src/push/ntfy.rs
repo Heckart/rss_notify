@@ -25,21 +25,18 @@ pub fn send_new_item_notification(
     let mut responses: Vec<Result<Response, Box<dyn error::Error>>> = Vec::new();
 
     for item in items {
-        let article_title: String = match &item.title {
-            Some(title_txt) => title_txt.clone(),
-            None => "(NO TITLE)".to_string(),
-        };
-        let article_url: String = match item.link() {
-            Some(url) => url.to_string(),
-            None => "(NO URL)".to_string(),
-        };
+        let article_title: String = item
+            .title
+            .as_ref()
+            .map_or_else(|| "(NO TITLE)".to_string(), Clone::clone);
+        let article_url: String = item
+            .link
+            .as_ref()
+            .map_or_else(|| "(NO URL)".to_string(), Clone::clone);
 
-        let push_title: String = format!("NEW ARTICLE: {}", article_title);
+        let push_title: String = format!("NEW ARTICLE: {article_title}");
 
-        debug!(
-            "Sending a POST reqeust to ntfy for {} {}.",
-            push_title, article_url
-        );
+        debug!("Sending a POST reqeust to ntfy for {push_title} {article_url}.");
         let result: Result<Response, Box<dyn error::Error>> = match client
             .post(format!("https://ntfy.sh/{ntfy_topic}"))
             .header("Title", push_title)

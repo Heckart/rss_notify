@@ -1,7 +1,28 @@
 #![warn(clippy::all)]
+#![warn(clippy::pedantic)]
+#![warn(clippy::nursery)]
 #![deny(warnings)]
+#![allow(clippy::allow_attributes_without_reason)]
+#![allow(clippy::blanket_clippy_restriction_lints)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::exhaustive_structs)]
+#![allow(clippy::implicit_return)]
+#![allow(clippy::match_bool)]
+#![allow(clippy::missing_docs_in_private_items)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_inline_in_public_items)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::mod_module_files)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::panic)]
+#![allow(clippy::pub_use)]
+#![allow(clippy::redundant_type_annotations)]
+#![allow(clippy::single_call_fn)]
+#![allow(clippy::single_match_else)]
+#![allow(clippy::std_instead_of_core)]
+#![allow(clippy::too_long_first_doc_paragraph)]
+pub mod database;
 pub mod env_setup;
 pub mod fetch;
 pub mod parse;
 pub mod push;
-pub mod database;

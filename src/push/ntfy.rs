@@ -28,11 +28,11 @@ pub fn send_new_item_notification(
         let article_title: String = item
             .title
             .as_ref()
-            .map_or_else(|| "(NO TITLE)".to_string(), Clone::clone);
+            .map_or_else(|| "(NO TITLE)".to_owned(), Clone::clone);
         let article_url: String = item
             .link
             .as_ref()
-            .map_or_else(|| "(NO URL)".to_string(), Clone::clone);
+            .map_or_else(|| "(NO URL)".to_owned(), Clone::clone);
 
         let push_title: String = format!("NEW ARTICLE: {article_title}");
 
@@ -89,5 +89,6 @@ pub fn send_failure_notification(
         return Err(Box::new(result_err));
     }
 
-    Ok(result.unwrap())
+    // SAFETY: The above line ensures this is not Err
+    unsafe { Ok(result.unwrap_unchecked()) }
 }

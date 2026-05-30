@@ -1,6 +1,6 @@
 use crate::database::{DBEntry, get_feed_from_db, insert_feed_to_db};
 use bytes::Bytes;
-use log::{error, trace, warn};
+use log::{debug, error, trace, warn};
 use rss::{Channel, Item, ItemBuilder};
 use rusqlite::Connection;
 use std::error;
@@ -19,6 +19,7 @@ pub fn get_new_rss_items(
     feed_url: &String,
     feed_bytes: &Bytes,
 ) -> Result<Vec<Item>, Box<dyn error::Error>> {
+    #![allow(clippy::expect_used)] // temporary
     trace!("Inside get_new_rss_items.");
 
     let db_feed_items: Vec<Item> = match get_feed_from_db(conn, feed_url) {
@@ -43,7 +44,7 @@ pub fn get_new_rss_items(
         }
     };
 
-    let new_feed_channel: Channel = match Channel::read_from(&feed_bytes[..]) {
+    let new_feed_channel: Channel = match Channel::read_from(&**feed_bytes) {
         Ok(channel) => {
             trace!("Successfully converted {feed_url} feed bytes into rss channel.");
             normalize_rss_items_in_channel(channel)
@@ -103,7 +104,7 @@ pub fn get_new_rss_items(
 /// **Status**:     Done
 pub fn stringify_feed_bytes(feed_bytes: &Bytes) -> Result<String, Box<dyn error::Error>> {
     trace!("Inside serialize_feed_bytes");
-    let rss_channel: Channel = match Channel::read_from(&feed_bytes[..]) {
+    let rss_channel: Channel = match Channel::read_from(&**feed_bytes) {
         Ok(result) => {
             trace!("Successfully converted feed bytes to rss_channel.");
             normalize_rss_items_in_channel(result)
@@ -116,7 +117,7 @@ pub fn stringify_feed_bytes(feed_bytes: &Bytes) -> Result<String, Box<dyn error:
 
     let serialized: String = match serde_json::to_string(&rss_channel.items().to_vec()) {
         Ok(json) => {
-            trace!("Successfully stringified feed bytes.");
+            debug!("Successfully stringified feed bytes as {json}.");
             json
         }
         Err(err) => {
@@ -125,7 +126,6 @@ pub fn stringify_feed_bytes(feed_bytes: &Bytes) -> Result<String, Box<dyn error:
         }
     };
 
-    println!("new method serialized: {serialized}");
     Ok(serialized)
 }
 
@@ -168,8 +168,8 @@ fn normalize_rss_items_in_channel(channel: Channel) -> Channel {
 
         new_items.push(
             ItemBuilder::default()
-                .title(Some(item_title.to_string()))
-                .link(Some(item_link.to_string()))
+                .title(Some(item_title.to_owned()))
+                .link(Some(item_link.to_owned()))
                 .build(),
         );
     }
@@ -211,6 +211,7 @@ fn make_new_item_vector(old_items: &[Item], new_channel: &Channel) -> Vec<Item> 
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
 pub fn print_serialized_rss(items: &[Item]) {
+    #![allow(clippy::print_stdout)]
     trace!("Inside print_serialized_rss with  {} items.", items.len());
     if !items.is_empty() {
         for item in items {

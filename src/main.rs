@@ -2,15 +2,32 @@
 #![warn(clippy::all)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
+#![warn(clippy::restriction)]
 #![deny(warnings)]
+#![allow(clippy::allow_attributes_without_reason)]
+#![allow(clippy::arbitrary_source_item_ordering)]
+#![allow(clippy::blanket_clippy_restriction_lints)]
 #![allow(clippy::doc_markdown)]
+#![allow(clippy::exhaustive_structs)]
+#![allow(clippy::implicit_return)]
 #![allow(clippy::match_bool)]
+#![allow(clippy::missing_docs_in_private_items)]
 #![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_inline_in_public_items)]
 #![allow(clippy::missing_panics_doc)]
+#![allow(clippy::mod_module_files)]
+#![allow(clippy::module_name_repetitions)]
 #![allow(clippy::must_use_candidate)]
+#![allow(clippy::panic)]
+#![allow(clippy::pub_use)]
+#![allow(clippy::redundant_type_annotations)]
+#![allow(clippy::single_call_fn)]
 #![allow(clippy::single_match_else)]
 #![allow(clippy::too_long_first_doc_paragraph)]
 use bytes::Bytes;
+use core::error;
+use core::error::Error;
+use core::time::Duration;
 use log::{debug, error, info, trace};
 use reqwest::StatusCode;
 use reqwest::blocking::Response;
@@ -21,10 +38,7 @@ use rss_notify::fetch::fetch_feed_as_bytes;
 use rss_notify::parse::get_new_rss_items;
 use rss_notify::push::{send_failure_notification, send_new_item_notification};
 use rusqlite::Connection;
-use std::error;
-use std::error::Error;
 use std::thread::sleep;
-use std::time::Duration;
 
 /*
 1. Download feed
@@ -41,7 +55,8 @@ use std::time::Duration;
 /// **Tests**:      Not implemented yet
 /// **Status**:     Add support for tracking website changes in addition to rss feed changes,
 ///                 maybe transition program from blocking to async
-fn main() {
+fn main() -> ! {
+#![allow(clippy::cognitive_complexity)] // temporary
     env_logger::init();
     trace!("Starting up!");
 
@@ -63,7 +78,7 @@ fn main() {
                 Ok(bytes) => {
                     if bytes.is_some() {
                         debug!("Sourced feed bytes for {url}.");
-                        // invariant
+                        // SAFETY: we have an earlier check that ensures bytes is Some
                         unsafe { bytes.unwrap_unchecked() }
                     } else {
                         debug!("Feed {url} did not have indicated web page changes. Skipping!");
@@ -112,7 +127,9 @@ fn main() {
                     match response {
                         Ok(ok) => {
                             let status: StatusCode = ok.status();
-                            let body: String = ok.text().unwrap();
+                            let body: String = ok
+                                .text()
+                                .unwrap_or_else(|_| "N/A (Ntfy did not return body)".to_owned());
 
                             if status == StatusCode::OK {
                                 debug!("Ntfy responsed with\nStatus: {status}\nBody:\n{body}\n.");
@@ -195,7 +212,8 @@ fn try_send_failure_notification(errors: &mut Vec<String>, new_error: Option<Str
             debug!(
                 "Ntfy responsed with\nStatus: {}\nBody:\n{}\n.",
                 ok.status(),
-                ok.text().unwrap()
+                ok.text()
+                    .unwrap_or_else(|_| { "N/A (Ntfy did not return body)".to_owned() })
             );
             info!("Able to send error notification, so clearing error vector.");
             errors.clear();

@@ -223,9 +223,9 @@ fn get_existing_feed(
     let mut get_client: RequestBuilder = Client::new().get(feed_url);
 
     // maybe change this to do both etag and last_modified if both exist?
-    if let Some(etag) = &existing_db_entry.etag {
+    if let Some(etag) = existing_db_entry.etag {
         get_client = get_client.header(IF_NONE_MATCH, etag);
-    } else if let Some(last_modified) = &existing_db_entry.last_modified {
+    } else if let Some(last_modified) = existing_db_entry.last_modified {
         get_client = get_client.header(IF_MODIFIED_SINCE, last_modified);
     } else {
         // there aren't any saved headers, so we need to pull the full bytes not considering headers

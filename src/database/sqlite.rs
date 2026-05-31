@@ -4,7 +4,7 @@ use rusqlite::{Connection, params};
 
 pub struct DBEntry {
     pub feed_name: String,
-    pub history: Option<String>, // history has a not NULL constraint so there is always a history in the feed, but we may be passing a None in circumstances dictated by http.rs
+    pub history: String,
     pub last_modified: Option<String>,
     pub etag: Option<String>,
 }
@@ -182,10 +182,7 @@ pub fn get_feed_from_db(
 /// **Panics**:     No
 /// **Modifies**:   Creates or updates a row in the db with the new_row's feed_name column
 /// **Tests**:      Not implemented yet
-/// **Status**:     Done? I've gone back and forth several times on whether or not to have one
-///                 function that handles all of this as is currently done, or to have three separate
-///                 functions: one for cerating new rows, one for updating headers only (post fetch),
-///                 and one for updating history only (post parse).
+/// **Status**:     Done?
 pub fn insert_feed_to_db(conn: &Connection, new_row: &DBEntry) -> Result<usize, rusqlite::Error> {
     trace!(
         "Inside insert_feed_to_db inserting feed {}.",
@@ -194,20 +191,11 @@ pub fn insert_feed_to_db(conn: &Connection, new_row: &DBEntry) -> Result<usize, 
 
     match conn.execute(
         "INSERT INTO feed_hist (feed_name, history, last_modified, etag)
-        VALUES (
-            ?1,
-            COALESCE(?2,
-                (SELECT history FROM feed_hist WHERE feed_name = ?1)
-            ),
-            ?3,
-            ?4
-        )
+        VALUES (?1, ?2, ?3, ?4)
         ON CONFLICT(feed_name) DO UPDATE SET
-            history = COALESCE(?2, feed_hist.history),
-            last_modified = COALESCE(?3, feed_hist.last_modified),
-            etag = COALESCE(?4, feed_hist.etag)
-            ", // COALESCEing the headers probably isn't good. This stops a header from going null if a feed used to have one and since discarded it.
-        //TODO: change it!
+            history = ?2,
+            last_modified = ?3,
+            etag = ?4",
         params!(
             new_row.feed_name,
             new_row.history,

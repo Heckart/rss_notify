@@ -1,4 +1,5 @@
 use crate::database::{DBEntry, get_feed_from_db, insert_feed_to_db};
+use crate::fetch::FeedBytesAndHeaders;
 use bytes::Bytes;
 use log::{debug, error, trace, warn};
 use rss::{Channel, Item, ItemBuilder};
@@ -6,7 +7,8 @@ use rusqlite::Connection;
 use std::error;
 
 /// **Purpose**:    Grab new items from an rss feed and maintains DB feed history
-/// **Parameters**: A &rusqlite:Connection of the history db, a &String of the feed url, A Bytes object of rss content
+/// **Parameters**: A &rusqlite:Connection of the history db, a &String of the feed url, A
+///                 &FeedBytesAndHeaders object with bytes contents and optional headers
 /// **Ok Return**:  A Vec<rss::Item> of previously unseen rss content
 /// **Err Return**: A Box<dyn error::Error> from failure to serialize feed, failure to get feed
 ///                 bytes, or failure to access the DB
@@ -17,18 +19,13 @@ use std::error;
 pub fn get_new_rss_items(
     conn: &Connection,
     feed_url: &String,
-    feed_bytes: &Bytes,
+    feed_elements: &FeedBytesAndHeaders,
 ) -> Result<Vec<Item>, Box<dyn error::Error>> {
     #![allow(clippy::expect_used)] // temporary
     trace!("Inside get_new_rss_items.");
 
     let db_feed_items: Vec<Item> = match get_feed_from_db(conn, feed_url) {
-        Ok(response) => match serde_json::from_str(
-            response
-                .history
-                .expect("DB invariant violation: history must be NOT NULL.")
-                .as_str(),
-        ) {
+        Ok(response) => match serde_json::from_str(response.history.as_str()) {
             Ok(items) => {
                 trace!("Successfully serialized {feed_url} rss items from DB.");
                 items
@@ -44,7 +41,7 @@ pub fn get_new_rss_items(
         }
     };
 
-    let new_feed_channel: Channel = match Channel::read_from(&**feed_bytes) {
+    let new_feed_channel: Channel = match Channel::read_from(&*feed_elements.bytes) {
         Ok(channel) => {
             trace!("Successfully converted {feed_url} feed bytes into rss channel.");
             normalize_rss_items_in_channel(channel)
@@ -61,18 +58,18 @@ pub fn get_new_rss_items(
     if !new_items.is_empty() {
         let updated_row: DBEntry = DBEntry {
             feed_name: feed_url.clone(),
-            history: match stringify_feed_bytes(feed_bytes) {
+            history: match stringify_feed_bytes(&feed_elements.bytes) {
                 Ok(feed_hist) => {
                     trace!("Successfully stringified feed bytes for insertion to DB");
-                    Some(feed_hist)
+                    feed_hist
                 }
                 Err(err) => {
                     error!("Could not stringify feed bytes for insertion to DB");
                     return Err(err);
                 }
             },
-            last_modified: None,
-            etag: None,
+            last_modified: feed_elements.last_modified.clone(),
+            etag: feed_elements.etag.clone(),
         };
 
         // technically we don't have to return the error here, but it makes more sense to.
@@ -94,7 +91,7 @@ pub fn get_new_rss_items(
 
 /// **Purpose**:    Serialize a Bytes object of rss content into a String with only title and link
 ///                 taken from each rss item
-/// **Parameters**: A Bytes object of rss content
+/// **Parameters**: A &Bytes object of rss content
 /// **Ok Return**:  A String of rss content
 /// **Err Return**: A Box<dyn error::Error) if bytes cannot be converted to rss channel or rss::Item
 ///                 vector can't be serialized

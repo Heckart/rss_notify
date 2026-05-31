@@ -11,16 +11,17 @@ use std::fs::read_to_string;
 /// **Status**:     Done
 pub fn get_feed_list(feed_env_var: &str) -> Vec<String> {
     trace!("Inside get_feed_list with feed_env_var as {feed_env_var}.");
+
     // grab the txt contents of the feed url file
-    let mut url_file_contents: String = String::new();
-    match read_to_string(&mut url_file_contents) {
-        Ok(_) => {
+    let url_file_contents: String = match read_to_string(source_env_var(feed_env_var)) {
+        Ok(contents) => {
             trace!("Read feed url file contents.");
+            contents
         }
         Err(err) => {
             panic!("Could not convert file contents to string! {err}.");
         }
-    }
+    };
 
     // construct a vector of all the urls
     let url_list: Vec<String> = url_file_contents

@@ -3,7 +3,7 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![warn(clippy::restriction)]
-#![deny(warnings)]
+//#![deny(warnings)]
 #![allow(clippy::allow_attributes_without_reason)]
 #![allow(clippy::arbitrary_source_item_ordering)]
 #![allow(clippy::blanket_clippy_restriction_lints)]
@@ -24,17 +24,16 @@
 #![allow(clippy::single_call_fn)]
 #![allow(clippy::single_match_else)]
 #![allow(clippy::too_long_first_doc_paragraph)]
-use bytes::Bytes;
-use core::error;
-use core::error::Error;
-use core::time::Duration;
+use std::error;
+use std::error::Error;
+use std::time::Duration;
 use log::{debug, error, info, trace};
 use reqwest::StatusCode;
 use reqwest::blocking::Response;
 use rss::Item;
 use rss_notify::database::setup_db;
 use rss_notify::env_setup::get_feed_list;
-use rss_notify::fetch::fetch_feed_as_bytes;
+use rss_notify::fetch::{FeedBytesAndHeaders, fetch_feed_as_bytes};
 use rss_notify::parse::get_new_rss_items;
 use rss_notify::push::{send_failure_notification, send_new_item_notification};
 use rusqlite::Connection;
@@ -56,7 +55,7 @@ use std::thread::sleep;
 /// **Status**:     Add support for tracking website changes in addition to rss feed changes,
 ///                 maybe transition program from blocking to async
 fn main() -> ! {
-#![allow(clippy::cognitive_complexity)] // temporary
+    #![allow(clippy::cognitive_complexity)] // temporary
     env_logger::init();
     trace!("Starting up!");
 
@@ -74,12 +73,12 @@ fn main() -> ! {
         trace!("At the top of the main loop.");
         for url in &feed_urls {
             // get the feed contents from the url
-            let feed_bytes: Bytes = match fetch_feed_as_bytes(&conn, &url.clone()) {
-                Ok(bytes) => {
-                    if bytes.is_some() {
+            let feed_elements: FeedBytesAndHeaders = match fetch_feed_as_bytes(&conn, url) {
+                Ok(elements) => {
+                    if elements.is_some() {
                         debug!("Sourced feed bytes for {url}.");
                         // SAFETY: we have an earlier check that ensures bytes is Some
-                        unsafe { bytes.unwrap_unchecked() }
+                        unsafe { elements.unwrap_unchecked() }
                     } else {
                         debug!("Feed {url} did not have indicated web page changes. Skipping!");
                         continue;
@@ -95,7 +94,7 @@ fn main() -> ! {
 
             // find any new items from the feed
             debug!("Looking for new items in {url}.");
-            let feed_items: Vec<Item> = match get_new_rss_items(&conn, &url.clone(), &feed_bytes) {
+            let feed_items: Vec<Item> = match get_new_rss_items(&conn, url, &feed_elements) {
                 Ok(items) => {
                     debug!("Grabbed feed items from {url}.");
                     items
@@ -115,9 +114,8 @@ fn main() -> ! {
                 info!("No new items found for {url} since last check.");
             } else {
                 info!(
-                    "{} new feed items exist from {}, so sending pushes.",
-                    feed_items.len(),
-                    url
+                    "{} new feed items exist from {url}, so sending pushes.",
+                    feed_items.len()
                 );
 
                 let push_results: Vec<Result<Response, Box<dyn error::Error>>> =
@@ -143,7 +141,7 @@ fn main() -> ! {
                             error!(
                                 "send_new_item_notification: Initial response had errors: {err_msg}."
                             );
-                            errors.push(err_msg.clone());
+                            errors.push(err_msg);
                             debug!("Total errors are {}.", errors.len());
                         }
                     }

@@ -16,19 +16,27 @@ struct ResponseDetails {
     pub first_time_feed: bool,
 }
 
+/// Information to be passed from the fetch library to the parse library. Contains the feed bytes as
+/// well as the relevant headers if they exist
+pub struct FeedBytesAndHeaders {
+    pub bytes: Bytes,
+    pub etag: Option<String>,
+    pub last_modified: Option<String>,
+}
+
 /// **Purpose**:    Grab the bytes of rss feed content if new content is available
 /// **Parameters**: A &rusqlite::Connection for the db connection, a &String containing an rss feed URL
-/// **Ok Return**:  An Option<Bytes> object of rss content if a new GET request was made
+/// **Ok Return**:  An Option<FeedBytesAndHeaders> object of rss content and headers if a new GET
+///                 request was made and new content is expected
 /// **Err Return**: A Box<dyn error::Error> from a GET request or DB query
 /// **Panics**:     No
-/// **Modifies**:   Creates a new DB row if the feed didn't already have an entry, updates the DB
-///                 row headers if there are changes in the feed
+/// **Modifies**:   Creates a new DB row if the feed didn't already have an entry
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
 pub fn fetch_feed_as_bytes(
     conn: &Connection,
     feed_url: &String,
-) -> Result<Option<Bytes>, Box<dyn error::Error>> {
+) -> Result<Option<FeedBytesAndHeaders>, Box<dyn error::Error>> {
     trace!("Inside fetch_feed_as_bytes with feed_url of {feed_url}.");
 
     let feed_response: ResponseDetails;
@@ -66,35 +74,35 @@ pub fn fetch_feed_as_bytes(
         Err(err) => return Err(Box::new(err)),
     }
 
-    let mut returned_feed_bytes: Option<Bytes> = None;
+    let returned_feed_elements: FeedBytesAndHeaders;
 
-    if let Some(new_feed_bytes) = feed_response.bytes.clone() {
-        returned_feed_bytes = Some(new_feed_bytes);
-
-        // The only time this function should update the feed history is if the feed doesn't already
-        // exist in the data base
-        let bytes_to_stringify: Option<Bytes> = match feed_response.first_time_feed {
-            false => None,
-            true => feed_response.bytes,
+    // The bytes condition is what determines whether or not there is genuinely new content
+    // If not, we will just return a None value
+    if let Some(new_feed_bytes) = feed_response.bytes {
+        let returned_feed_bytes: Bytes = new_feed_bytes;
+        returned_feed_elements = FeedBytesAndHeaders {
+            bytes: returned_feed_bytes,
+            etag: feed_response.etag,
+            last_modified: feed_response.last_modified,
         };
-        match update_db_with_new_feed_info(
-            conn,
-            feed_url,
-            bytes_to_stringify,
-            feed_response.etag,
-            feed_response.last_modified,
-        ) {
-            Ok(_) => {
-                trace!("Successful update to DB for {feed_url}.");
-            }
-            Err(err) => {
-                error!("Could not update DB for {feed_url}.");
-                return Err(err);
+
+        // only calling this function if we know its the first time the feed has been seen
+        if feed_response.first_time_feed {
+            match update_db_with_new_feed_info(conn, feed_url, &returned_feed_elements) {
+                Ok(_) => {
+                    trace!("Successful update to DB for {feed_url}.");
+                    return Ok(None); // first time feed means return nothing back to main
+                }
+                Err(err) => {
+                    error!("Could not update DB for {feed_url}.");
+                    return Err(err);
+                }
             }
         }
+        return Ok(Some(returned_feed_elements));
     }
-
-    Ok(returned_feed_bytes)
+    // no bytes were returned from earlier, so we know there is no new content to parse
+    Ok(None)
 }
 
 /// **Purpose**:    Helper function to perform a GET request on a rss feed url and return useful
@@ -116,7 +124,7 @@ fn make_get_request(
 
     let request_result: Result<Response, reqwest::Error>;
 
-// tracking purposes in fetch_feed_as_bytes(), makes that function simpler 
+    // tracking purposes in fetch_feed_as_bytes(), makes that function simpler
     let first_time_seeing_feed: bool = if let Some(get_request) = get_client {
         request_result = RequestBuilder::send(get_request);
         false
@@ -144,7 +152,7 @@ fn make_get_request(
             debug!(
                 "GET request for {feed_url} had matching headers! Assuming no change to feed contents."
             );
-            //TODO: Can probably still update headers?
+            //TODO: Can probably still update headers? But this complicates things on the upsert...
             response_etag = None;
             response_last_modified = None;
             response_bytes = None;
@@ -236,43 +244,36 @@ fn get_existing_feed(
 }
 
 /// **Purpose**:    Update or create DB entry for a feeds headers + contents if feed is new
-/// **Parameters**: A &rusqlite::Connection for the db connection, a &String with feed name, a
-///                 Bytes object with new feed bytes, two Option<String>s for the etag and
-///                 last_modified headers
+/// **Parameters**: A &rusqlite::Connection for the db connection, a &FeedBytesAndHeaders with the
+///                 bytes amd headers from recent feed pull
 /// **Ok Return**:  A usize with row change count from the DB
 /// **Err Return**: A Box<dyn error::Error> from failure stringify bytes or to read the DB
 /// **Panics**:     No
-/// **Modifies**:   Creates or updates a row in the DB
+/// **Modifies**:   Creates a row in the DB
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
 fn update_db_with_new_feed_info(
     conn: &Connection,
     feed_url: &String,
-    feed_bytes: Option<Bytes>,
-    feed_etag: Option<String>,
-    feed_last_modified: Option<String>,
+    feed_bytes_headers: &FeedBytesAndHeaders,
 ) -> Result<usize, Box<dyn error::Error>> {
     trace!("Inside update_db_with_new_feed_info().");
 
-    let mut new_row: DBEntry = DBEntry {
+    let new_row: DBEntry = DBEntry {
         feed_name: feed_url.clone(),
-        history: None,
-        last_modified: feed_last_modified,
-        etag: feed_etag,
-    };
-
-    if let Some(new_bytes) = feed_bytes {
-        new_row.history = match stringify_feed_bytes(&new_bytes) {
+        history: match stringify_feed_bytes(&feed_bytes_headers.bytes) {
             Ok(feed_history) => {
                 trace!("Received rss feed history string.");
-                Some(feed_history)
+                feed_history
             }
             Err(err) => {
                 error!("Could not stringify feed_bytes from ().");
                 return Err(err);
             }
-        }
-    }
+        },
+        last_modified: feed_bytes_headers.last_modified.clone(),
+        etag: feed_bytes_headers.etag.clone(),
+    };
 
     match insert_feed_to_db(conn, &new_row) {
         Ok(rc) => {

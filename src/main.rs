@@ -3,11 +3,12 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
 #![warn(clippy::restriction)]
-//#![deny(warnings)]
+#![deny(warnings)]
 #![allow(clippy::allow_attributes_without_reason)]
 #![allow(clippy::arbitrary_source_item_ordering)]
 #![allow(clippy::blanket_clippy_restriction_lints)]
 #![allow(clippy::doc_markdown)]
+#![allow(clippy::doc_paragraphs_missing_punctuation)]
 #![allow(clippy::exhaustive_structs)]
 #![allow(clippy::implicit_return)]
 #![allow(clippy::match_bool)]
@@ -24,9 +25,9 @@
 #![allow(clippy::single_call_fn)]
 #![allow(clippy::single_match_else)]
 #![allow(clippy::too_long_first_doc_paragraph)]
-use std::error;
-use std::error::Error;
-use std::time::Duration;
+use core::error;
+use core::error::Error;
+use core::time::Duration;
 use log::{debug, error, info, trace};
 use reqwest::StatusCode;
 use reqwest::blocking::Response;

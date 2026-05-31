@@ -7,6 +7,7 @@
 #![allow(clippy::arbitrary_source_item_ordering)]
 #![allow(clippy::blanket_clippy_restriction_lints)]
 #![allow(clippy::doc_markdown)]
+#![allow(clippy::doc_paragraphs_missing_punctuation)]
 #![allow(clippy::exhaustive_structs)]
 #![allow(clippy::implicit_return)]
 #![allow(clippy::match_bool)]

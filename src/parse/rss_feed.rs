@@ -21,7 +21,6 @@ pub fn get_new_rss_items(
     feed_url: &String,
     feed_elements: &FeedBytesAndHeaders,
 ) -> Result<Vec<Item>, Box<dyn error::Error>> {
-    #![allow(clippy::expect_used)] // temporary
     trace!("Inside get_new_rss_items.");
 
     let db_feed_items: Vec<Item> = match get_feed_from_db(conn, feed_url) {

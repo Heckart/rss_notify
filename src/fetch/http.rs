@@ -3,17 +3,18 @@ use crate::parse::stringify_feed_bytes;
 use bytes::Bytes;
 use log::{debug, error, trace, warn};
 use reqwest::StatusCode;
-use reqwest::blocking::{Client, RequestBuilder, Response, get};
+use reqwest::blocking::{Client, RequestBuilder, Response};
 use reqwest::header::{ETAG, IF_MODIFIED_SINCE, IF_NONE_MATCH, LAST_MODIFIED};
 use rusqlite::Connection;
 use std::error;
 
 /// Holds the three members of a reqwest resonse that we care about
+/// bytes is optional in case no result is returned. If it didn't have the possibility of being
+/// optional, we could just use FeedBytesAndHeaders instead
 struct ResponseDetails {
     pub bytes: Option<Bytes>,
     pub etag: Option<String>,
     pub last_modified: Option<String>,
-    pub first_time_feed: bool,
 }
 
 /// Information to be passed from the fetch library to the parse library. Contains the feed bytes as
@@ -40,10 +41,12 @@ pub fn fetch_feed_as_bytes(
     trace!("Inside fetch_feed_as_bytes with feed_url of {feed_url}.");
 
     let feed_response: ResponseDetails;
+    let first_time_feed: bool;
 
     match feed_is_in_db(conn, feed_url) {
         Ok(feed_present) => {
             if feed_present {
+                first_time_feed = false;
                 // its not the first time we've seen the feed, so make a conditional request based
                 // upon the existing header contents if there are any
                 feed_response = match get_existing_feed(conn, feed_url) {
@@ -57,9 +60,11 @@ pub fn fetch_feed_as_bytes(
                     }
                 };
             } else {
+                first_time_feed = true;
                 // its the first time we've seen the feed, so pull its headers+bytes, parse into db and
                 // return None, so we know to continue in the main function
-                feed_response = match make_get_request(feed_url, None) {
+                let get_client: RequestBuilder = Client::new().get(feed_url);
+                feed_response = match make_get_request(feed_url, get_client) {
                     Ok(url_response) => {
                         trace!("GET routine for new feed {feed_url} successful.");
                         url_response
@@ -79,15 +84,14 @@ pub fn fetch_feed_as_bytes(
     // The bytes condition is what determines whether or not there is genuinely new content
     // If not, we will just return a None value
     if let Some(new_feed_bytes) = feed_response.bytes {
-        let returned_feed_bytes: Bytes = new_feed_bytes;
         returned_feed_elements = FeedBytesAndHeaders {
-            bytes: returned_feed_bytes,
+            bytes: new_feed_bytes,
             etag: feed_response.etag,
             last_modified: feed_response.last_modified,
         };
 
         // only calling this function if we know its the first time the feed has been seen
-        if feed_response.first_time_feed {
+        if first_time_feed {
             match update_db_with_new_feed_info(conn, feed_url, &returned_feed_elements) {
                 Ok(_) => {
                     trace!("Successful update to DB for {feed_url}.");
@@ -118,20 +122,11 @@ pub fn fetch_feed_as_bytes(
 /// **Status**:     Done
 fn make_get_request(
     feed_url: &String,
-    get_client: Option<RequestBuilder>,
+    get_client: RequestBuilder,
 ) -> Result<ResponseDetails, Box<dyn error::Error>> {
     trace!("Inside make_get_request.");
 
-    let request_result: Result<Response, reqwest::Error>;
-
-    // tracking purposes in fetch_feed_as_bytes(), makes that function simpler
-    let first_time_seeing_feed: bool = if let Some(get_request) = get_client {
-        request_result = RequestBuilder::send(get_request);
-        false
-    } else {
-        request_result = get(feed_url);
-        true
-    };
+    let request_result: Result<Response, reqwest::Error> = RequestBuilder::send(get_client);
 
     let response: Response = match request_result {
         Ok(url_response) => {
@@ -185,6 +180,7 @@ fn make_get_request(
             };
         }
         other_rc => {
+            // most likely this ends up being a 412 based on the standard
             warn!(
                 "GET request for {feed_url} had unexpected status code {other_rc}! Not sure what happened, so doing nothing."
             );
@@ -199,7 +195,6 @@ fn make_get_request(
         bytes: response_bytes,
         etag: response_etag,
         last_modified: response_last_modified,
-        first_time_feed: first_time_seeing_feed,
     })
 }
 
@@ -230,17 +225,15 @@ fn get_existing_feed(
 
     let mut get_client: RequestBuilder = Client::new().get(feed_url);
 
-    // maybe change this to do both etag and last_modified if both exist?
+    // you can send multiple conditional headers
+    // https://datatracker.ietf.org/doc/html/rfc7232#section-6
     if let Some(etag) = existing_db_entry.etag {
         get_client = get_client.header(IF_NONE_MATCH, etag);
-    } else if let Some(last_modified) = existing_db_entry.last_modified {
-        get_client = get_client.header(IF_MODIFIED_SINCE, last_modified);
-    } else {
-        // there aren't any saved headers, so we need to pull the full bytes not considering headers
-        return make_get_request(feed_url, None);
     }
-
-    make_get_request(feed_url, Some(get_client))
+    if let Some(last_modified) = existing_db_entry.last_modified {
+        get_client = get_client.header(IF_MODIFIED_SINCE, last_modified);
+    }
+    make_get_request(feed_url, get_client)
 }
 
 /// **Purpose**:    Update or create DB entry for a feeds headers + contents if feed is new

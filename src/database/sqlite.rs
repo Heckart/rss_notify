@@ -2,9 +2,18 @@ use crate::{database, env_setup::source_env_var};
 use log::{debug, error, trace};
 use rusqlite::{Connection, params};
 
+/// The full row specification
+#[derive(Clone)]
 pub struct DBEntry {
     pub feed_name: String,
     pub history: String,
+    pub last_modified: Option<String>,
+    pub etag: Option<String>,
+}
+
+/// When updating headers, there is no need to pass a feed history
+pub struct DBHeaders {
+    pub feed_name: String,
     pub last_modified: Option<String>,
     pub etag: Option<String>,
 }
@@ -173,8 +182,7 @@ pub fn get_feed_from_db(
     row_content
 }
 
-/// **Purpose**:    Creates or updates a row for a feed. Preserves history and headers if passed
-///                 value is None.
+/// **Purpose**:    Creates or updates a row for a feed.
 /// **Parameters**: A &rusqlite::Connection for the database, a database::sqlite::DBEntry with new
 ///                 row contents
 /// **Ok Return**:  A usize representing a success status code
@@ -182,7 +190,7 @@ pub fn get_feed_from_db(
 /// **Panics**:     No
 /// **Modifies**:   Creates or updates a row in the db with the new_row's feed_name column
 /// **Tests**:      Not implemented yet
-/// **Status**:     Done?
+/// **Status**:     Done
 pub fn insert_feed_to_db(conn: &Connection, new_row: &DBEntry) -> Result<usize, rusqlite::Error> {
     trace!(
         "Inside insert_feed_to_db inserting feed {}.",
@@ -202,6 +210,38 @@ pub fn insert_feed_to_db(conn: &Connection, new_row: &DBEntry) -> Result<usize, 
             new_row.last_modified,
             new_row.etag
         ),
+    ) {
+        Ok(ok) => {
+            debug!("Insert query updated {ok} rows.");
+            Ok(ok)
+        }
+        Err(err) => {
+            error!("Insert query responeded with error: {err}.");
+            Err(err)
+        }
+    }
+}
+
+/// **Purpose**:    Update the header columns for an existing row
+/// **Parameters**: A &rusqlite::Connection for the database, a database::sqlite::DBHeaders with new
+///                 header content
+/// **Ok Return**:  A usize representing a success status code
+/// **Err Return**: A rusqlite::Error from the query failing
+/// **Panics**:     No
+/// **Modifies**:   Updates a row in the db with the passed header values
+/// **Tests**:      Not implemented yet
+/// **Status**:     Done
+pub fn update_feed_headers(conn: &Connection, row: &DBHeaders) -> Result<usize, rusqlite::Error> {
+    trace!(
+        "Inside update_feed_headers updating feed {}.",
+        row.feed_name
+    );
+
+    match conn.execute(
+        "INSERT INTO feed_hist (last_modified, etag)
+        VALUES (?2, ?3)
+        WHEERE feed_name = ?1",
+        params!(row.feed_name, row.last_modified, row.etag),
     ) {
         Ok(ok) => {
             debug!("Insert query updated {ok} rows.");

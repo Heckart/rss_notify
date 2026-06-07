@@ -1,10 +1,14 @@
-use crate::database::{DBEntry, feed_is_in_db, get_feed_from_db, insert_feed_to_db};
+use crate::database::{
+    DBEntry, DBHeaders, feed_is_in_db, get_feed_from_db, insert_feed_to_db, update_feed_headers,
+};
 use crate::parse::stringify_feed_bytes;
 use bytes::Bytes;
 use log::{debug, error, trace, warn};
 use reqwest::StatusCode;
 use reqwest::blocking::{Client, RequestBuilder, Response};
-use reqwest::header::{ETAG, IF_MODIFIED_SINCE, IF_NONE_MATCH, LAST_MODIFIED};
+use reqwest::header::{
+    ETAG, HeaderName, IF_MODIFIED_SINCE, IF_NONE_MATCH, LAST_MODIFIED, ToStrError,
+};
 use rusqlite::Connection;
 use std::error;
 
@@ -15,6 +19,7 @@ struct ResponseDetails {
     pub bytes: Option<Bytes>,
     pub etag: Option<String>,
     pub last_modified: Option<String>,
+    pub response_type: StatusCode,
 }
 
 /// Information to be passed from the fetch library to the parse library. Contains the feed bytes as
@@ -42,6 +47,7 @@ pub fn fetch_feed_as_bytes(
 
     let feed_response: ResponseDetails;
     let first_time_feed: bool;
+    let mut existing_db_entry: Option<DBEntry> = None;
 
     match feed_is_in_db(conn, feed_url) {
         Ok(feed_present) => {
@@ -49,7 +55,17 @@ pub fn fetch_feed_as_bytes(
                 first_time_feed = false;
                 // its not the first time we've seen the feed, so make a conditional request based
                 // upon the existing header contents if there are any
-                feed_response = match get_existing_feed(conn, feed_url) {
+                existing_db_entry = match get_feed_from_db(conn, feed_url) {
+                    Ok(row) => {
+                        trace!("Received row from DB.");
+                        Some(row)
+                    }
+                    Err(err) => {
+                        error!("Failed to receive row from DB.");
+                        return Err(Box::new(err));
+                    }
+                };
+                feed_response = match get_existing_feed(feed_url, existing_db_entry.clone()) {
                     Ok(url_response) => {
                         trace!("GET routine for existing feed {feed_url} successful.");
                         url_response
@@ -63,14 +79,13 @@ pub fn fetch_feed_as_bytes(
                 first_time_feed = true;
                 // its the first time we've seen the feed, so pull its headers+bytes, parse into db and
                 // return None, so we know to continue in the main function
-                let get_client: RequestBuilder = Client::new().get(feed_url);
-                feed_response = match make_get_request(feed_url, get_client) {
+                feed_response = match make_get_request(feed_url, Client::new().get(feed_url)) {
                     Ok(url_response) => {
                         trace!("GET routine for new feed {feed_url} successful.");
                         url_response
                     }
                     Err(err) => {
-                        error!("GET routine for new  feed {feed_url} failed.");
+                        error!("GET routine for new feed {feed_url} failed.");
                         return Err(err);
                     }
                 };
@@ -82,8 +97,9 @@ pub fn fetch_feed_as_bytes(
     let returned_feed_elements: FeedBytesAndHeaders;
 
     // The bytes condition is what determines whether or not there is genuinely new content
-    // If not, we will just return a None value
-    if let Some(new_feed_bytes) = feed_response.bytes {
+    if (feed_response.response_type == StatusCode::OK)
+        && let Some(new_feed_bytes) = feed_response.bytes
+    {
         returned_feed_elements = FeedBytesAndHeaders {
             bytes: new_feed_bytes,
             etag: feed_response.etag,
@@ -103,10 +119,35 @@ pub fn fetch_feed_as_bytes(
                 }
             }
         }
-        return Ok(Some(returned_feed_elements));
+        Ok(Some(returned_feed_elements)) // OK response + new bytes on existing feed
+    } else if feed_response.response_type == StatusCode::NOT_MODIFIED {
+        if let Some(real_db_entry) = existing_db_entry
+            && (feed_response.etag != real_db_entry.etag
+                || feed_response.last_modified != real_db_entry.last_modified)
+        {
+            match update_feed_headers(
+                conn,
+                &DBHeaders {
+                    feed_name: real_db_entry.feed_name,
+                    etag: real_db_entry.etag,
+                    last_modified: real_db_entry.last_modified,
+                },
+            ) {
+                Ok(_) => {
+                    trace!("Headers updated successfully.");
+                    Ok(None) // NOT_MODIFIED response, but had headers to update with no feed changes
+                }
+                Err(err) => {
+                    error!("Headers could not be updated due to {err}.");
+                    Err(Box::new(err))
+                }
+            }
+        } else {
+            Ok(None) // NOT_MODIFIED response and no headers to update
+        }
+    } else {
+        Ok(None) // no bytes were returned from earlier, so we know there is no new content to parse
     }
-    // no bytes were returned from earlier, so we know there is no new content to parse
-    Ok(None)
 }
 
 /// **Purpose**:    Helper function to perform a GET request on a rss feed url and return useful
@@ -142,32 +183,63 @@ fn make_get_request(
     let response_etag: Option<String>;
     let response_last_modified: Option<String>;
     let response_bytes: Option<Bytes>;
+    let status_code: StatusCode;
     match response.status() {
         StatusCode::NOT_MODIFIED => {
             debug!(
                 "GET request for {feed_url} had matching headers! Assuming no change to feed contents."
             );
-            //TODO: Can probably still update headers? But this complicates things on the upsert...
-            response_etag = None;
-            response_last_modified = None;
+            // In theory, the server will choose to match on only one of the headers if both are
+            // sent, meaning one could change and we still get NOT_MODIFIED response. We will pass ahead
+            // those values now just in case, though this situation admittedly seems like a rare
+            // occurence
+            response_etag = match extract_header_as_string(&response, &ETAG) {
+                Ok(header_str) => {
+                    trace!("Recevied ETag as string.");
+                    header_str
+                }
+                Err(err) => {
+                    error!("Did not receive ETag as string successfully.");
+                    return Err(Box::new(err));
+                }
+            };
+            response_last_modified = match extract_header_as_string(&response, &LAST_MODIFIED) {
+                Ok(header_str) => {
+                    trace!("Recevied Last-Modified as string.");
+                    header_str
+                }
+                Err(err) => {
+                    error!("Did not receive Last-Modified as string successfully.");
+                    return Err(Box::new(err));
+                }
+            };
             response_bytes = None;
+            status_code = StatusCode::NOT_MODIFIED;
         }
         StatusCode::OK => {
             // full request was made
             debug!("Full GET request made for {feed_url}! Assuming new feed contents.");
-            //TODO: These two are supressing errors with ok(), so at some point make the errors explicit
-            response_etag = response
-                .headers()
-                .get(ETAG)
-                .and_then(|header| header.to_str().ok())
-                .map(str::to_owned);
 
-            response_last_modified = response
-                .headers()
-                .get(LAST_MODIFIED)
-                .and_then(|header| header.to_str().ok())
-                .map(str::to_owned);
-
+            response_etag = match extract_header_as_string(&response, &ETAG) {
+                Ok(header_str) => {
+                    trace!("Recevied ETag as string.");
+                    header_str
+                }
+                Err(err) => {
+                    error!("Did not receive ETag as string successfully.");
+                    return Err(Box::new(err));
+                }
+            };
+            response_last_modified = match extract_header_as_string(&response, &LAST_MODIFIED) {
+                Ok(header_str) => {
+                    trace!("Recevied Last-Modified as string.");
+                    header_str
+                }
+                Err(err) => {
+                    error!("Did not receive Last-Modified as string successfully.");
+                    return Err(Box::new(err));
+                }
+            };
             response_bytes = match response.bytes() {
                 Ok(bytes) => {
                     trace!("Extracted bytes from response.");
@@ -178,6 +250,7 @@ fn make_get_request(
                     return Err(Box::new(err));
                 }
             };
+            status_code = StatusCode::OK;
         }
         other_rc => {
             // most likely this ends up being a 412 based on the standard
@@ -188,6 +261,7 @@ fn make_get_request(
             response_etag = None;
             response_last_modified = None;
             response_bytes = None;
+            status_code = other_rc;
         }
     }
 
@@ -195,7 +269,40 @@ fn make_get_request(
         bytes: response_bytes,
         etag: response_etag,
         last_modified: response_last_modified,
+        response_type: status_code,
     })
+}
+
+/// **Purpose**:    Helper function to extract a header from a response if it exists and stringify it
+/// **Parameters**: A Response with headers to extract, A HeaderName of the header type to extract
+/// **Ok Return**:  An Option<String> with the header contents if it existed
+/// **Err Return**: A ToStrError from failure to stringify
+/// **Panics**:     No
+/// **Modifies**:   Nothing
+/// **Tests**:      Not implemented yet
+/// **Status**:     Done
+fn extract_header_as_string(
+    response: &Response,
+    header_type: &HeaderName,
+) -> Result<Option<String>, ToStrError> {
+    let binding = header_type.clone();
+    let header_name_str: &str = binding.as_str();
+    response.headers().get(header_type).map_or_else(
+        || {
+            trace!("Feed does not have {header_name_str}.");
+            Ok(None)
+        },
+        |header_val| match header_val.to_str() {
+            Ok(header_str) => {
+                trace!("{header_name_str} stringified as {header_str}.");
+                Ok(Some(header_str.to_owned()))
+            }
+            Err(err) => {
+                error!("{header_name_str} exists, but cannot be stringified. {err}");
+                Err(err)
+            }
+        },
+    )
 }
 
 /// **Purpose**:    Based on current feed headers and DB headers, pull down the feed bytes only if
@@ -208,30 +315,24 @@ fn make_get_request(
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
 fn get_existing_feed(
-    conn: &Connection,
     feed_url: &String,
+    existing_db_entry: Option<DBEntry>,
 ) -> Result<ResponseDetails, Box<dyn error::Error>> {
     trace!("Inside get_existing_feed().");
-    let existing_db_entry: DBEntry = match get_feed_from_db(conn, feed_url) {
-        Ok(db_row) => {
-            trace!("Successfully sourced existing DB entry for {feed_url}.");
-            db_row
-        }
-        Err(err) => {
-            error!("Could not successfully source existing DB entry for {feed_url}.");
-            return Err(Box::new(err));
-        }
-    };
 
     let mut get_client: RequestBuilder = Client::new().get(feed_url);
 
-    // you can send multiple conditional headers
-    // https://datatracker.ietf.org/doc/html/rfc7232#section-6
-    if let Some(etag) = existing_db_entry.etag {
-        get_client = get_client.header(IF_NONE_MATCH, etag);
-    }
-    if let Some(last_modified) = existing_db_entry.last_modified {
-        get_client = get_client.header(IF_MODIFIED_SINCE, last_modified);
+    // have to do some trickery to satisfy requirements in the main function from this library
+    // In practice, every time this function gets called, the DB will exist.
+    if let Some(real_db_entry) = existing_db_entry {
+        // you can send multiple conditional headers
+        // https://datatracker.ietf.org/doc/html/rfc7232#section-6
+        if let Some(etag) = real_db_entry.etag {
+            get_client = get_client.header(IF_NONE_MATCH, etag);
+        }
+        if let Some(last_modified) = real_db_entry.last_modified {
+            get_client = get_client.header(IF_MODIFIED_SINCE, last_modified);
+        }
     }
     make_get_request(feed_url, get_client)
 }

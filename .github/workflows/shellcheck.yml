@@ -1,0 +1,19 @@
+name: Bash Lint
+
+on: [push, pull_request]
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Create dummy .env
+        run: touch .env; echo -e "RSS_NOTIFY_BIN=0\nRSS_NOTIFY_DB=0\nRSS_NOTIFY_LOG_FILE=0\nRSS_NOTIFY_LOG_RETENTION_DAYS=0" > .env
+
+      - name: Install ShellCheck
+        run: sudo apt update && sudo apt install -y shellcheck
+
+      - name: Run Bash lint
+        run: shellcheck -x -o all -s bash -S style -- *.sh

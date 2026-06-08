@@ -2,9 +2,18 @@ use crate::{database, env_setup::source_env_var};
 use log::{debug, error, trace};
 use rusqlite::{Connection, params};
 
+/// The full row specification
+#[derive(Clone)]
 pub struct DBEntry {
     pub feed_name: String,
-    pub history: Option<String>, // history has a not NULL constraint so there is always a history in the feed, but we may be passing a None in circumstances dictated by http.rs
+    pub history: String,
+    pub last_modified: Option<String>,
+    pub etag: Option<String>,
+}
+
+/// When updating headers, there is no need to pass a feed history
+pub struct DBHeaders {
+    pub feed_name: String,
     pub last_modified: Option<String>,
     pub etag: Option<String>,
 }
@@ -21,7 +30,7 @@ pub fn setup_db(db_name: &str) -> Connection {
 
     let conn: Connection = match Connection::open(source_env_var(db_name)) {
         Ok(connection) => {
-            debug!("{} DB connection established.", db_name);
+            debug!("{db_name} DB connection established.");
             connection
         }
         Err(err) => {
@@ -57,10 +66,10 @@ fn initialize_feed_table(conn: &Connection) {
             trace!("feed_hist table initialized.");
         }
         Err(err) => {
-            error!("CREATE TABLE responded with err {}.", err);
+            error!("CREATE TABLE responded with err {err}.");
             panic!();
         }
-    };
+    }
 }
 
 /// **Purpose**:    Finds if a specific feed exists in the feed table
@@ -72,7 +81,7 @@ fn initialize_feed_table(conn: &Connection) {
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
 pub fn feed_is_in_db(conn: &Connection, feed: &String) -> Result<bool, rusqlite::Error> {
-    trace!("Inside feed_is_in_db searching for existence of {}.", feed);
+    trace!("Inside feed_is_in_db searching for existence of {feed}.");
     match conn.query_one(
         "SELECT COUNT(1) 
         FROM feed_hist 
@@ -82,18 +91,15 @@ pub fn feed_is_in_db(conn: &Connection, feed: &String) -> Result<bool, rusqlite:
     ) {
         Ok(count) => {
             if count > 0 {
-                debug!("{} exists in feed_hist.", feed);
+                debug!("{feed} exists in feed_hist.");
                 Ok(true)
             } else {
-                debug!("{} does not exist in feed_hist.", feed);
+                debug!("{feed} does not exist in feed_hist.");
                 Ok(false)
             }
         }
         Err(err) => {
-            error!(
-                "Could not determine if {} is in feed_hist due to error: {}.",
-                feed, err
-            );
+            error!("Could not determine if {feed} is in feed_hist due to error: {err}.");
             Err(err)
         }
     }
@@ -111,7 +117,7 @@ pub fn get_feed_from_db(
     conn: &Connection,
     feed: &str,
 ) -> Result<database::sqlite::DBEntry, rusqlite::Error> {
-    trace!("Inside get_feed_hist_from_db getting hist for {}.", feed);
+    trace!("Inside get_feed_hist_from_db getting hist for {feed}.");
 
     let row_content: Result<DBEntry, rusqlite::Error> = match conn.query_row(
         "SELECT feed_name, history, last_modified, etag 
@@ -122,11 +128,11 @@ pub fn get_feed_from_db(
             Ok(DBEntry {
                 feed_name: match row.get(0) {
                     Ok(ok) => {
-                        trace!("DB feed_name {} extracted.", ok);
+                        trace!("DB feed_name {ok} extracted.");
                         ok
                     }
                     Err(err) => {
-                        error!("Could not get feed_name row due to error: {}.", err);
+                        error!("Could not get feed_name row due to error: {err}.");
                         return Err(err);
                     }
                 },
@@ -136,7 +142,7 @@ pub fn get_feed_from_db(
                         ok
                     }
                     Err(err) => {
-                        error!("Could not get history row due to error: {}.", err);
+                        error!("Could not get history row due to error: {err}.");
                         return Err(err);
                     }
                 },
@@ -146,7 +152,7 @@ pub fn get_feed_from_db(
                         ok
                     }
                     Err(err) => {
-                        error!("Could not get last_modified row due to error: {}.", err);
+                        error!("Could not get last_modified row due to error: {err}.");
                         return Err(err);
                     }
                 },
@@ -156,7 +162,7 @@ pub fn get_feed_from_db(
                         ok
                     }
                     Err(err) => {
-                        error!("Could not get etag row due to error: {}.", err);
+                        error!("Could not get etag row due to error: {err}.");
                         return Err(err);
                     }
                 },
@@ -168,7 +174,7 @@ pub fn get_feed_from_db(
             Ok(entry)
         }
         Err(err) => {
-            error!("Query for {} failed with error: {}.", feed, err);
+            error!("Query for {feed} failed with error: {err}.");
             Err(err)
         }
     };
@@ -176,8 +182,7 @@ pub fn get_feed_from_db(
     row_content
 }
 
-/// **Purpose**:    Creates or updates a row for a feed. Preserves history and headers if passed
-///                 value is None.
+/// **Purpose**:    Creates or updates a row for a feed.
 /// **Parameters**: A &rusqlite::Connection for the database, a database::sqlite::DBEntry with new
 ///                 row contents
 /// **Ok Return**:  A usize representing a success status code
@@ -185,11 +190,8 @@ pub fn get_feed_from_db(
 /// **Panics**:     No
 /// **Modifies**:   Creates or updates a row in the db with the new_row's feed_name column
 /// **Tests**:      Not implemented yet
-/// **Status**:     Done? I've gone back and forth several times on whether or not to have one
-///                 function that handles all of this as is currently done, or to have three separate
-///                 functions: one for cerating new rows, one for updating headers only (post fetch),
-///                 and one for updating history only (post parse).
-pub fn insert_feed_to_db(conn: &Connection, new_row: DBEntry) -> Result<usize, rusqlite::Error> {
+/// **Status**:     Done
+pub fn insert_feed_to_db(conn: &Connection, new_row: &DBEntry) -> Result<usize, rusqlite::Error> {
     trace!(
         "Inside insert_feed_to_db inserting feed {}.",
         new_row.feed_name
@@ -197,20 +199,11 @@ pub fn insert_feed_to_db(conn: &Connection, new_row: DBEntry) -> Result<usize, r
 
     match conn.execute(
         "INSERT INTO feed_hist (feed_name, history, last_modified, etag)
-        VALUES (
-            ?1,
-            COALESCE(?2,
-                (SELECT history FROM feed_hist WHERE feed_name = ?1)
-            ),
-            ?3,
-            ?4
-        )
+        VALUES (?1, ?2, ?3, ?4)
         ON CONFLICT(feed_name) DO UPDATE SET
-            history = COALESCE(?2, feed_hist.history),
-            last_modified = COALESCE(?3, feed_hist.last_modified),
-            etag = COALESCE(?4, feed_hist.etag)
-            ", // COALESCEing the headers probably isn't good. This stops a header from going null if a feed used to have one and since discarded it.
-        //TODO: change it!
+            history = ?2,
+            last_modified = ?3,
+            etag = ?4",
         params!(
             new_row.feed_name,
             new_row.history,
@@ -219,11 +212,43 @@ pub fn insert_feed_to_db(conn: &Connection, new_row: DBEntry) -> Result<usize, r
         ),
     ) {
         Ok(ok) => {
-            debug!("Insert query updated {} rows.", ok);
+            debug!("Insert query updated {ok} rows.");
             Ok(ok)
         }
         Err(err) => {
-            error!("Insert query responeded with error: {}.", err);
+            error!("Insert query responeded with error: {err}.");
+            Err(err)
+        }
+    }
+}
+
+/// **Purpose**:    Update the header columns for an existing row
+/// **Parameters**: A &rusqlite::Connection for the database, a database::sqlite::DBHeaders with new
+///                 header content
+/// **Ok Return**:  A usize representing a success status code
+/// **Err Return**: A rusqlite::Error from the query failing
+/// **Panics**:     No
+/// **Modifies**:   Updates a row in the db with the passed header values
+/// **Tests**:      Not implemented yet
+/// **Status**:     Done
+pub fn update_feed_headers(conn: &Connection, row: &DBHeaders) -> Result<usize, rusqlite::Error> {
+    trace!(
+        "Inside update_feed_headers updating feed {}.",
+        row.feed_name
+    );
+
+    match conn.execute(
+        "INSERT INTO feed_hist (last_modified, etag)
+        VALUES (?2, ?3)
+        WHEERE feed_name = ?1",
+        params!(row.feed_name, row.last_modified, row.etag),
+    ) {
+        Ok(ok) => {
+            debug!("Insert query updated {ok} rows.");
+            Ok(ok)
+        }
+        Err(err) => {
+            error!("Insert query responeded with error: {err}.");
             Err(err)
         }
     }

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#shellcheck disable=SC2312
 set -euo pipefail
 
 echo "Launching rss notify on $(date +%Y-%m-%d-%H:%M%S)"

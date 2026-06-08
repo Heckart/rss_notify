@@ -1,7 +1,6 @@
 use log::{debug, trace};
 use std::env::var;
-use std::fs::File;
-use std::io::Read;
+use std::fs::read_to_string;
 
 /// **Purpose**:    Grabs the list of rss feeds in the file represented by an env var
 /// **Parameters**: A &str representing the name of an environment variable holding a feed list file
@@ -11,29 +10,16 @@ use std::io::Read;
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
 pub fn get_feed_list(feed_env_var: &str) -> Vec<String> {
-    trace!(
-        "Inside get_feed_list with feed_env_var as {}.",
-        feed_env_var
-    );
-    // open the feed url file, specified by the env variable
-    let mut feed_url_file: File = match File::open(source_env_var(feed_env_var)) {
-        Ok(file_name) => {
-            trace!("Opened feed url file.");
-            file_name
-        }
-        Err(err) => {
-            panic!("Could not open feed url file! {}.", err)
-        }
-    };
+    trace!("Inside get_feed_list with feed_env_var as {feed_env_var}.");
 
     // grab the txt contents of the feed url file
-    let mut url_file_contents: String = String::new();
-    match feed_url_file.read_to_string(&mut url_file_contents) {
-        Ok(_) => {
+    let url_file_contents: String = match read_to_string(source_env_var(feed_env_var)) {
+        Ok(contents) => {
             trace!("Read feed url file contents.");
+            contents
         }
         Err(err) => {
-            panic!("Could not convert file contents to string! {}", err)
+            panic!("Could not convert file contents to string! {err}.");
         }
     };
 
@@ -55,14 +41,14 @@ pub fn get_feed_list(feed_env_var: &str) -> Vec<String> {
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
 pub fn source_env_var(env_var: &str) -> String {
-    trace!("Inside source_env_var with env_var as {}.", env_var);
+    trace!("Inside source_env_var with env_var as {env_var}.");
     let env_var_content: String = match var(env_var) {
         Ok(var) => {
-            debug!("Sourced {} as {}.", env_var, var);
+            debug!("Sourced {env_var} as {var}.");
             var
         }
         Err(err) => {
-            panic!("Could not source env variable! {}", err);
+            panic!("Could not source env variable! {err}");
         }
     };
 

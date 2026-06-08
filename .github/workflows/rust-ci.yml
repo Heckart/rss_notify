@@ -3,7 +3,7 @@ name: Rust Checks
 on: [push, pull_request]
 
 jobs:
-  Build-Formatting-Linting:
+  Build-Format-Lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

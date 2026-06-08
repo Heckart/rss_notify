@@ -1,9 +1,9 @@
-name: Rust Lint
+name: Rust Checks
 
 on: [push, pull_request]
 
 jobs:
-  Clippy:
+  Build-Formatting-Linting:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -12,7 +12,13 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
-      - name: Run Rust lint
+      - name: Build check
+        run: cargo build
+
+      - name: Formatting check
+        run: cargo fmt -v --all --check
+
+      - name: Lint/static analysis check
         run: cargo clippy --all-targets -- -Dwarnings

@@ -1,9 +1,9 @@
-name: Bash Lint
+name: Bash Checks
 
 on: [push, pull_request]
 
 jobs:
-  shellcheck:
+  Synatx-Formatting-Linting:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -12,8 +12,18 @@ jobs:
       - name: Create dummy .env
         run: touch .env; echo -e "RSS_NOTIFY_BIN=0\nRSS_NOTIFY_DB=0\nRSS_NOTIFY_LOG_FILE=0\nRSS_NOTIFY_LOG_RETENTION_DAYS=0" > .env
 
+      - name: Syntax check
+        run: bash -n -- *.sh
+
+      - name: Install shfmt
+        run: |
+          sudo apt update && sudo apt install -y shfmt
+
+      - name: Formatting check
+        run: shfmt -ln bash -d -- *.sh
+
       - name: Install ShellCheck
         run: sudo apt update && sudo apt install -y shellcheck
 
-      - name: Run Bash lint
+      - name: Lint/static analysis check
         run: shellcheck -x -o all -s bash -S style -- *.sh

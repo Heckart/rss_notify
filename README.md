@@ -69,10 +69,9 @@ Here is some of the work that I still want to do, in no particular order:
 2. Possibly make the GET and POST requests async instead of blocking, though I’m not sure if the effort is worth it on this one.
 3. Implement unit, integration, and end-to-end tests for everything.
 4. Set a max size for the error vector. If the number of encountered, unalerted errors goes over the limit, just kill the program to avoid potentially using up the entirety of free ntfy push capacity once the error pushes are allowed to go through. Possibly also start tracking error rate over time and even if the error pushes go through, but an earlier step is erroring on every loop, then also end early.
-5. Set up a CI pipeline to enforce the linting and formatting rules specified in the above section.
-6. There are a few `panic!()`s that can probably be changed to more graceful error handling.
-7. Change the feed list from being raw text to a structured config file + on a per feed basis, allow the specification of "blacklisted" article titles that are skipped from being alerted on (useful if a feed freqeuntly posts deuplicate items).
-8. Set up a podman container to serve as a standard environment for running the binary, rather than running on bare-metal.
-9. Let the bash orchestrator walk through first time env setup if it determines the .env file is missing required variables.
-10. Maybe have errors get pushed to a separate ntfy topic from the topic used for feed changes.
-11. Eventually, shift away from a third party service (ntfy) and create a basic Android shell app that leverages FCM to handle notifications.
+5. There are a few `panic!()`s that can probably be changed to more graceful error handling.
+6. Change the feed list from being raw text to a structured config file + on a per feed basis, allow the specification of "blacklisted" article titles that are skipped from being alerted on (useful if a feed freqeuntly posts deuplicate items).
+7. Set up a podman container to serve as a standard environment for running the binary, rather than running on bare-metal.
+8. Let the bash orchestrator walk through first time env setup if it determines the .env file is missing required variables.
+9. Maybe have errors get pushed to a separate ntfy topic from the topic used for feed changes.
+10. Eventually, shift away from a third party service (ntfy) and create a basic Android shell app that leverages FCM to handle notifications.

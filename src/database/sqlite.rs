@@ -240,7 +240,7 @@ pub fn update_feed_headers(conn: &Connection, row: &DBHeaders) -> Result<usize, 
     match conn.execute(
         "INSERT INTO feed_hist (last_modified, etag)
         VALUES (?2, ?3)
-        WHEERE feed_name = ?1",
+        WHERE feed_name = ?1",
         params!(row.feed_name, row.last_modified, row.etag),
     ) {
         Ok(ok) => {

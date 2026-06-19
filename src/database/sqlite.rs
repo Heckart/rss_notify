@@ -238,17 +238,19 @@ pub fn update_feed_headers(conn: &Connection, row: &DBHeaders) -> Result<usize, 
     );
 
     match conn.execute(
-        "INSERT INTO feed_hist (last_modified, etag)
-        VALUES (?2, ?3)
-        WHERE feed_name = ?1",
+        "UPDATE feed_hist
+        SET last_modified = ?2,
+            etag = ?3
+        WHERE feed_name = ?1
+        ",
         params!(row.feed_name, row.last_modified, row.etag),
     ) {
         Ok(ok) => {
-            debug!("Insert query updated {ok} rows.");
+            debug!("Update query updated {ok} rows.");
             Ok(ok)
         }
         Err(err) => {
-            error!("Insert query responeded with error: {err}.");
+            error!("Update query responeded with error: {err}.");
             Err(err)
         }
     }

@@ -33,7 +33,7 @@ use reqwest::StatusCode;
 use reqwest::blocking::Response;
 use rss::Item;
 use rss_notify::database::setup_db;
-use rss_notify::env_setup::get_feed_list;
+use rss_notify::env_setup::{FeedConfig, get_feed_config};
 use rss_notify::fetch::{FeedBytesAndHeaders, fetch_feed_as_bytes};
 use rss_notify::parse::get_new_rss_items;
 use rss_notify::push::{send_failure_notification, send_new_item_notification};
@@ -66,13 +66,14 @@ fn main() -> ! {
     // all of the previously encountered errors
     let mut errors: Vec<String> = Vec::new();
 
-    let feed_urls: Vec<String> = get_feed_list("RSS_NOTIFY_FEED_LIST");
-    debug!("Sourced feed list of {} feeds.", feed_urls.len());
+    let feed_list: FeedConfig = get_feed_config("RSS_NOTIFY_FEED_LIST_2");
+    debug!("Sourced feed list of {} feeds.", feed_list.feeds.len());
 
     // this program runs infinitely, set it and forget it
     loop {
         trace!("At the top of the main loop.");
-        for url in &feed_urls {
+        for feed in &feed_list.feeds {
+            let url: &String = &feed.url;
             // get the feed contents from the url
             let feed_elements: FeedBytesAndHeaders = match fetch_feed_as_bytes(&conn, url) {
                 Ok(elements) => {
@@ -95,18 +96,19 @@ fn main() -> ! {
 
             // find any new items from the feed
             debug!("Looking for new items in {url}.");
-            let feed_items: Vec<Item> = match get_new_rss_items(&conn, url, &feed_elements) {
-                Ok(items) => {
-                    debug!("Grabbed feed items from {url}.");
-                    items
-                }
-                Err(err) => {
-                    let err_msg: String = construct_full_error(&*err);
-                    error!("get_new_rss_items: failed to get new rss items: {err_msg}");
-                    try_send_failure_notification(&mut errors, Some(err_msg));
-                    continue;
-                }
-            };
+            let feed_items: Vec<Item> =
+                match get_new_rss_items(&conn, url, &feed_elements, &feed.blacklist) {
+                    Ok(items) => {
+                        debug!("Grabbed feed items from {url}.");
+                        items
+                    }
+                    Err(err) => {
+                        let err_msg: String = construct_full_error(&*err);
+                        error!("get_new_rss_items: failed to get new rss items: {err_msg}");
+                        try_send_failure_notification(&mut errors, Some(err_msg));
+                        continue;
+                    }
+                };
 
             //parse::print_serialized_rss(feed_items.clone());
 

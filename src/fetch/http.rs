@@ -31,7 +31,7 @@ pub struct FeedBytesAndHeaders {
 }
 
 /// **Purpose**:    Grab the bytes of rss feed content if new content is available
-/// **Parameters**: A &rusqlite::Connection for the db connection, a &String containing an rss feed URL
+/// **Parameters**: A &rusqlite::Connection for the db connection, a &String containing an rss feed URL,
 /// **Ok Return**:  An Option<FeedBytesAndHeaders> object of rss content and headers if a new GET
 ///                 request was made and new content is expected
 /// **Err Return**: A Box<dyn error::Error> from a GET request or DB query

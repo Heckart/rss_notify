@@ -8,7 +8,8 @@ use std::error;
 
 /// **Purpose**:    Grab new items from an rss feed and maintains DB feed history
 /// **Parameters**: A &rusqlite:Connection of the history db, a &String of the feed url, A
-///                 &FeedBytesAndHeaders object with bytes contents and optional headers
+///                 &FeedBytesAndHeaders object with bytes contents and optional headers, A
+///                 &[String] of title contents with suppressed alerts
 /// **Ok Return**:  A Vec<rss::Item> of previously unseen rss content
 /// **Err Return**: A Box<dyn error::Error> from failure to serialize feed, failure to get feed
 ///                 bytes, or failure to access the DB
@@ -20,6 +21,7 @@ pub fn get_new_rss_items(
     conn: &Connection,
     feed_url: &String,
     feed_elements: &FeedBytesAndHeaders,
+    title_blacklist: &[String],
 ) -> Result<Vec<Item>, Box<dyn error::Error>> {
     trace!("Inside get_new_rss_items.");
 
@@ -51,7 +53,7 @@ pub fn get_new_rss_items(
         }
     };
 
-    let new_items: Vec<Item> = make_new_item_vector(&db_feed_items, &new_feed_channel);
+    let mut new_items: Vec<Item> = make_new_item_vector(&db_feed_items, &new_feed_channel);
 
     // if there are differences, update db row and return the new items
     if !new_items.is_empty() {
@@ -84,6 +86,17 @@ pub fn get_new_rss_items(
             }
         }
     }
+
+    // we still want blacklisted titles to go to the DB, otherwise when a blacklisted article is
+    // present, we wouldn't be able to make use of RFC 7232 GET requests. Instead, after DB
+    // insertion, cut them from the return list
+    new_items.retain(|item| {
+        item.title().is_none_or(|title| {
+            title_blacklist
+                .iter()
+                .all(|blacklisted| !title.contains(blacklisted))
+        })
+    });
 
     Ok(new_items)
 }

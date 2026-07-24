@@ -18,7 +18,7 @@ pub struct FeedConfig {
 
 /// **Purpose**:    Grabs the list of rss feeds in the file represented by an env var
 /// **Parameters**: A &str representing the name of an environment variable holding a feed list file
-/// **Returns**:    A vec<String> of all feeds urls in the file
+/// **Returns**:    A FeedConfig of all feeds configurations
 /// **Panics**:     If the file cannot be opened or read
 /// **Modifies**:   Nothing
 /// **Tests**:      Not implemented yet

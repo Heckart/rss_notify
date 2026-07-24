@@ -122,7 +122,7 @@ fn main() -> ! {
                 );
 
                 let push_results: Vec<Result<Response, Box<dyn error::Error>>> =
-                    send_new_item_notification(&feed_items);
+                    send_new_item_notification(&feed_items, &feed.prefix);
 
                 for response in push_results {
                     match response {

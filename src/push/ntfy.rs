@@ -5,7 +5,7 @@ use rss::Item;
 use std::error;
 
 /// **Purpose**:    Sends a POST to ntfy to make pushes with article title and link of new rss content
-/// **Parameters**: A &Vec<rss:Item> of new rss content
+/// **Parameters**: A &Vec<rss:Item> of new rss content, A &str of a prefix for alert title
 /// **Ok Return**:  A Vec<reqwest::blocking::Response> of all responses received from ntfy
 /// **Err Return**: A Vec<reqwest::Error> from any unsuccessful POSTs
 /// **Panics**:     No
@@ -14,6 +14,7 @@ use std::error;
 /// **Status**:     Done
 pub fn send_new_item_notification(
     items: &Vec<Item>,
+    alert_prefix: &str,
 ) -> Vec<Result<Response, Box<dyn error::Error>>> {
     trace!(
         "Inside send_new_item_notification with {} items.",
@@ -25,10 +26,16 @@ pub fn send_new_item_notification(
     let mut responses: Vec<Result<Response, Box<dyn error::Error>>> = Vec::new();
 
     for item in items {
-        let article_title: String = item
-            .title
-            .as_ref()
-            .map_or_else(|| "(NO TITLE)".to_owned(), Clone::clone);
+        //TODO There is probably a more concise way to do this
+        let mut article_title: String = alert_prefix.to_owned();
+        article_title.push(' ');
+        article_title.push_str(
+            &item
+                .title
+                .as_ref()
+                .map_or_else(|| "(NO TITLE)".to_owned(), Clone::clone),
+        );
+
         let article_url: String = item
             .link
             .as_ref()

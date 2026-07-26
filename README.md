@@ -7,11 +7,27 @@ In the past, I have tried to find a service that would allow me to receive notif
 ## Building and Running
 1. This is a rust project, so you should have the rust toolchain installed. You can follow the official instructions [here](https://rust-lang.org/tools/install/).
 2. Once you have cargo available from the previous step, run `cargo build --release` to compile the binary. This may take a couple minutes if you have a slow processor.
-3. Create a file with the rss links you’d like to track. The only rules are that it must be a valid rss feed and you must put only one feed url per line in the file. The file can be called whatever you want and be stored wherever you’d like on your system (more info in the next step).
+3. Create a config file with the rss links you’d like to track. Each feed should be under a `[[feeds]]` array and contain a url, notification prefix, and title blacklist. The file can be called whatever you want and be stored wherever you’d like on your system (more info in the next step). Here is example syntax:
+```toml
+[[feeds]]
+url = "https://www.example.com" # the direct url to the feed in question
+prefix = "[NEW ARTICLE]" # Whatever you want prepended to the new article notifications coming from this feed.
+blacklist = ["example"] # If an article from the feed contains anything in this array, then suppress the notification.
+
+[[feeds]]
+url = "https://www.example2.com"
+prefix = "Feed 2 Article:"
+blacklist = ["Title example", "Another title example"] # you can have multiple blacklisted titles
+
+[[feeds]]
+url = "https://www.example3.com"
+prefix = "" # you don't need a prefix if you don't want one
+blacklist = [] # you don't have to blacklist any titles if you don't want to
+```
 4. This project uses environment variables for all system-specific configurations and for storing secrets. There are six variables that must be present in a `.env` file in the same directory as the provided `exec_rss_notify.sh` script. A sample `.env` file is provided below:
 ```bash
 export RSS_NOTIFY_DB="/absolute/path/to/db/name.sql" # what you want your db to be called and where it should be stored
-export RSS_NOTIFY_FEED_LIST="/abolute/path/to/feed/list/from/step/three/feeds.rss" # where you are storing your feed file
+export RSS_NOTIFY_FEED_LIST="/abolute/path/to/feed/list/from/step/three/feeds.toml" # where you are storing your feed configurations
 export RSS_NOTIFY_BIN="/absolute/path/to/rss_notify/target/release/rss_notify" # the path to the compiled binary. If you followed step two, it will be inside the rss_notify dir as shown in this sample
 cur_date=$(date +%Y%m%d%H%M%S) # optional, just used to put the date in log files
 export RSS_NOTIFY_LOG_FILE="/absolute/path/to/where/you/want/rss_notify_log_${cur_date}.log" # wherever you want your log files stored and the naming convention for the individual log files
@@ -70,8 +86,7 @@ Here is some of the work that I still want to do, in no particular order:
 3. Implement unit, integration, and end-to-end tests for everything.
 4. Set a max size for the error vector. If the number of encountered, unalerted errors goes over the limit, just kill the program to avoid potentially using up the entirety of free ntfy push capacity once the error pushes are allowed to go through. Possibly also start tracking error rate over time and even if the error pushes go through, but an earlier step is erroring on every loop, then also end early.
 5. There are a few `panic!()`s that can probably be changed to more graceful error handling.
-6. Change the feed list from being raw text to a structured config file + on a per feed basis, allow the specification of "blacklisted" article titles that are skipped from being alerted on (useful if a feed freqeuntly posts deuplicate items).
-7. Set up a podman container to serve as a standard environment for running the binary, rather than running on bare-metal.
-8. Let the bash orchestrator walk through first time env setup if it determines the .env file is missing required variables.
-9. Maybe have errors get pushed to a separate ntfy topic from the topic used for feed changes.
-10. Eventually, shift away from a third party service (ntfy) and create a basic Android shell app that leverages FCM to handle notifications.
+6. Set up a podman container to serve as a standard environment for running the binary, rather than running on bare-metal.
+7. Let the bash orchestrator walk through first time env setup if it determines the .env file is missing required variables.
+8. Maybe have errors get pushed to a separate ntfy topic from the topic used for feed changes.
+9. Eventually, shift away from a third party service (ntfy) and create a basic Android shell app that leverages FCM to handle notifications.

@@ -66,7 +66,7 @@ fn main() -> ! {
     // all of the previously encountered errors
     let mut errors: Vec<String> = Vec::new();
 
-    let feed_list: FeedConfig = get_feed_config("RSS_NOTIFY_FEED_LIST_2");
+    let feed_list: FeedConfig = get_feed_config("RSS_NOTIFY_FEED_LIST");
     debug!("Sourced feed list of {} feeds.", feed_list.feeds.len());
 
     // this program runs infinitely, set it and forget it

@@ -27,9 +27,9 @@ pub fn send_new_item_notification(
 
     for item in items {
         //TODO There is probably a more concise way to do this
-        let mut article_title: String = alert_prefix.to_owned();
-        article_title.push(' ');
-        article_title.push_str(
+        let mut push_title: String = alert_prefix.to_owned();
+        push_title.push(' ');
+        push_title.push_str(
             &item
                 .title
                 .as_ref()
@@ -40,8 +40,6 @@ pub fn send_new_item_notification(
             .link
             .as_ref()
             .map_or_else(|| "(NO URL)".to_owned(), Clone::clone);
-
-        let push_title: String = format!("NEW ARTICLE: {article_title}");
 
         debug!("Sending a POST reqeust to ntfy for {push_title} {article_url}.");
         let result: Result<Response, Box<dyn error::Error>> = match client

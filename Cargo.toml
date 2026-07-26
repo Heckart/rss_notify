@@ -26,7 +26,7 @@ rpath = false
 
 [package]
 name = "rss_notify"
-version = "0.3.1"
+version = "1.0.0"
 authors = ["Ethan Heckart"]
 edition = "2024"
 description = "RSS feed watcher; send push notifications whenever a feed has new items"
@@ -44,3 +44,4 @@ serde_json = "1.0.147"
 log = "0.4.29"
 env_logger = "0.11.9"
 rusqlite = { version = "0.40.0", features = ["bundled"] }
+toml = "1.1.3"

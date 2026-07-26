@@ -1,21 +1,34 @@
 use log::{debug, trace};
+use serde::Deserialize;
 use std::env::var;
 use std::fs::read_to_string;
+use toml::from_str;
+
+#[derive(Deserialize)]
+pub struct FeedInfo {
+    pub url: String,
+    pub prefix: String,
+    pub blacklist: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub struct FeedConfig {
+    pub feeds: Vec<FeedInfo>,
+}
 
 /// **Purpose**:    Grabs the list of rss feeds in the file represented by an env var
 /// **Parameters**: A &str representing the name of an environment variable holding a feed list file
-/// **Returns**:    A vec<String> of all feeds urls in the file
+/// **Returns**:    A FeedConfig of all feeds configurations
 /// **Panics**:     If the file cannot be opened or read
 /// **Modifies**:   Nothing
 /// **Tests**:      Not implemented yet
 /// **Status**:     Done
-pub fn get_feed_list(feed_env_var: &str) -> Vec<String> {
-    trace!("Inside get_feed_list with feed_env_var as {feed_env_var}.");
+pub fn get_feed_config(feed_config_var: &str) -> FeedConfig {
+    trace!("Inside get_feed_config with feed_config_var as {feed_config_var}.");
 
-    // grab the txt contents of the feed url file
-    let url_file_contents: String = match read_to_string(source_env_var(feed_env_var)) {
+    let config_file_contents: String = match read_to_string(source_env_var(feed_config_var)) {
         Ok(contents) => {
-            trace!("Read feed url file contents.");
+            trace!("Read feed config contents.");
             contents
         }
         Err(err) => {
@@ -23,14 +36,17 @@ pub fn get_feed_list(feed_env_var: &str) -> Vec<String> {
         }
     };
 
-    // construct a vector of all the urls
-    let url_list: Vec<String> = url_file_contents
-        .trim()
-        .lines()
-        .map(String::from)
-        .collect::<Vec<String>>();
+    let structured_config: FeedConfig = match from_str(&config_file_contents) {
+        Ok(contents) => {
+            trace!("Converted feed config string to FeedConfig structure.");
+            contents
+        }
+        Err(err) => {
+            panic!("Could not convert feed config string to FeedConfig! {err}.");
+        }
+    };
 
-    url_list
+    structured_config
 }
 
 /// **Purpose**:    Grabs the contents of an envrionment variable

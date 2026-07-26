@@ -6,7 +6,7 @@ use rss::{Channel, Item, ItemBuilder};
 use rusqlite::Connection;
 use std::error;
 
-/// **Purpose**:    Grab new items from an rss feed and maintains DB feed history
+/// **Purpose**:    Grab new items/headers from an rss feed and maintains DB entry
 /// **Parameters**: A &rusqlite:Connection of the history db, a &String of the feed url, A
 ///                 &FeedBytesAndHeaders object with bytes contents and optional headers, A
 ///                 &[String] of title contents with suppressed alerts
@@ -20,29 +20,34 @@ use std::error;
 pub fn get_new_rss_items(
     conn: &Connection,
     feed_url: &String,
-    feed_elements: &FeedBytesAndHeaders,
+    new_feed_info: &FeedBytesAndHeaders,
     title_blacklist: &[String],
 ) -> Result<Vec<Item>, Box<dyn error::Error>> {
     trace!("Inside get_new_rss_items.");
 
-    let db_feed_items: Vec<Item> = match get_feed_from_db(conn, feed_url) {
-        Ok(response) => match serde_json::from_str(response.history.as_str()) {
-            Ok(items) => {
-                trace!("Successfully serialized {feed_url} rss items from DB.");
-                items
-            }
-            Err(err) => {
-                error!("Failed to turn DB feed history string into Vec<rss:Item>.");
-                return Err(Box::new(err));
-            }
-        },
+    let existing_db_entry: DBEntry = match get_feed_from_db(conn, feed_url) {
+        Ok(response) => {
+            trace!("Pulled existing entry for {feed_url} from DB.");
+            response
+        }
         Err(err) => {
             error!("Failed to get {feed_url} row from DB.");
             return Err(Box::new(err));
         }
     };
 
-    let new_feed_channel: Channel = match Channel::read_from(&*feed_elements.bytes) {
+    let db_feed_items: Vec<Item> = match serde_json::from_str(existing_db_entry.history.as_str()) {
+        Ok(items) => {
+            trace!("Successfully serialized {feed_url} rss items from DB.");
+            items
+        }
+        Err(err) => {
+            error!("Failed to turn DB feed history string into Vec<rss:Item>.");
+            return Err(Box::new(err));
+        }
+    };
+
+    let new_feed_channel: Channel = match Channel::read_from(&*new_feed_info.bytes) {
         Ok(channel) => {
             trace!("Successfully converted {feed_url} feed bytes into rss channel.");
             normalize_rss_items_in_channel(channel)
@@ -54,32 +59,40 @@ pub fn get_new_rss_items(
     };
 
     let mut new_items: Vec<Item> = make_new_item_vector(&db_feed_items, &new_feed_channel);
+    let mut updated_row: DBEntry = DBEntry {
+        feed_name: existing_db_entry.feed_name,
+        history: existing_db_entry.history, // start with the existing history. Iff diff then update
+        last_modified: new_feed_info.last_modified.clone(), // new val is always accurate
+        etag: new_feed_info.etag.clone(),   // new val is always accurate
+    };
 
-    // if there are differences, update db row and return the new items
+    // if there are history differences, update db row
     if !new_items.is_empty() {
-        let updated_row: DBEntry = DBEntry {
-            feed_name: feed_url.clone(),
-            history: match stringify_feed_bytes(&feed_elements.bytes) {
-                Ok(feed_hist) => {
-                    trace!("Successfully stringified feed bytes for insertion to DB");
-                    feed_hist
-                }
-                Err(err) => {
-                    error!("Could not stringify feed bytes for insertion to DB");
-                    return Err(err);
-                }
-            },
-            last_modified: feed_elements.last_modified.clone(),
-            etag: feed_elements.etag.clone(),
+        updated_row.history = match stringify_feed_bytes(&new_feed_info.bytes) {
+            Ok(feed_hist) => {
+                trace!("Successfully stringified feed bytes for insertion to DB");
+                feed_hist
+            }
+            Err(err) => {
+                error!("Could not stringify feed bytes for insertion to DB");
+                return Err(err);
+            }
         };
+    }
 
-        // technically we don't have to return the error here, but it makes more sense to.
-        // if we can't update here, we will find the changes from this iteration again next time
-        // as it will still be comparing with the old DB data
+    // the structure of the code elsewhere ensures that we only call the parse library if there are
+    // differences between the existing db entry and what we will be updating here
+    if !new_items.is_empty()
+        || new_feed_info.last_modified != existing_db_entry.last_modified
+        || new_feed_info.etag != existing_db_entry.etag
+    {
         match insert_feed_to_db(conn, &updated_row) {
             Ok(_) => {
                 trace!("Sucessfully updated {feed_url} DB row");
             }
+            // technically we don't have to return the error here, but it makes more sense to.
+            // if we can't update here, we will find the changes from this iteration again next time
+            // as it will still be comparing with the old DB data
             Err(err) => {
                 error!("Could not update DB row for {feed_url}.");
                 return Err(Box::new(err));
@@ -87,9 +100,11 @@ pub fn get_new_rss_items(
         }
     }
 
-    // we still want blacklisted titles to go to the DB, otherwise when a blacklisted article is
-    // present, we wouldn't be able to make use of RFC 7232 GET requests. Instead, after DB
-    // insertion, cut them from the return list
+    // controversy about where to put this: going here adds blacklisted items to the db, but the
+    // new_items vec will not contain them in the future. Moving this to right after the new_items vec
+    // is made means they don't go to the db, but have to be filtered every time. Also moving this
+    // there means an older blacklisted item that is later removed from the blacklist will be alerted
+    // about when its removed...
     new_items.retain(|item| {
         item.title().is_none_or(|title| {
             title_blacklist

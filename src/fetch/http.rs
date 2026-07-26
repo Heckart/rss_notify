@@ -47,6 +47,8 @@ pub fn fetch_feed_as_bytes(
 
     let feed_response: ResponseDetails;
     let first_time_feed: bool;
+    // we need to initialize this here to avoid a possible unintialized referece. Maybe this could
+    // be converted to a non-optional with junk defaulted values?
     let mut existing_db_entry: Option<DBEntry> = None;
 
     match feed_is_in_db(conn, feed_url) {
@@ -121,16 +123,16 @@ pub fn fetch_feed_as_bytes(
         }
         Ok(Some(returned_feed_elements)) // OK response + new bytes on existing feed
     } else if feed_response.response_type == StatusCode::NOT_MODIFIED {
-        if let Some(real_db_entry) = existing_db_entry
-            && (feed_response.etag != real_db_entry.etag
-                || feed_response.last_modified != real_db_entry.last_modified)
+        if let Some(current_db_entry) = existing_db_entry
+            && (feed_response.etag != current_db_entry.etag
+                || feed_response.last_modified != current_db_entry.last_modified)
         {
             match update_feed_headers(
                 conn,
                 &DBHeaders {
-                    feed_name: real_db_entry.feed_name,
-                    etag: real_db_entry.etag,
-                    last_modified: real_db_entry.last_modified,
+                    feed_name: current_db_entry.feed_name,
+                    etag: feed_response.etag,
+                    last_modified: feed_response.last_modified,
                 },
             ) {
                 Ok(_) => {
@@ -167,9 +169,7 @@ fn make_get_request(
 ) -> Result<ResponseDetails, Box<dyn error::Error>> {
     trace!("Inside make_get_request.");
 
-    let request_result: Result<Response, reqwest::Error> = RequestBuilder::send(get_client);
-
-    let response: Response = match request_result {
+    let response: Response = match RequestBuilder::send(get_client) {
         Ok(url_response) => {
             trace!("GET request for {feed_url} successful.");
             url_response
@@ -307,7 +307,8 @@ fn extract_header_as_string(
 
 /// **Purpose**:    Based on current feed headers and DB headers, pull down the feed bytes only if
 ///                 necessary
-/// **Parameters**: A &String containing an rss feed url
+/// **Parameters**: A &String containing an rss feed url, a Option<DBEntry> representing the current
+///                 state of the DB
 /// **Ok Return**:  A ResponseDetails object from the feed
 /// **Err Return**: A Box<dyn error::Error> from failure to read the DB
 /// **Panics**:     No
@@ -324,13 +325,13 @@ fn get_existing_feed(
 
     // have to do some trickery to satisfy requirements in the main function from this library
     // In practice, every time this function gets called, the DB will exist.
-    if let Some(real_db_entry) = existing_db_entry {
+    if let Some(current_db_entry) = existing_db_entry {
         // you can send multiple conditional headers
         // https://datatracker.ietf.org/doc/html/rfc7232#section-6
-        if let Some(etag) = real_db_entry.etag {
+        if let Some(etag) = current_db_entry.etag {
             get_client = get_client.header(IF_NONE_MATCH, etag);
         }
-        if let Some(last_modified) = real_db_entry.last_modified {
+        if let Some(last_modified) = current_db_entry.last_modified {
             get_client = get_client.header(IF_MODIFIED_SINCE, last_modified);
         }
     }

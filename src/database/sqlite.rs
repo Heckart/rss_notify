@@ -30,7 +30,7 @@ pub fn setup_db(db_name: &str) -> Connection {
 
     let conn: Connection = match Connection::open(source_env_var(db_name)) {
         Ok(connection) => {
-            debug!("{db_name} DB connection established.");
+            trace!("{db_name} DB connection established.");
             connection
         }
         Err(err) => {
@@ -91,10 +91,10 @@ pub fn feed_is_in_db(conn: &Connection, feed: &String) -> Result<bool, rusqlite:
     ) {
         Ok(count) => {
             if count > 0 {
-                debug!("{feed} exists in feed_hist.");
+                trace!("{feed} exists in feed_hist.");
                 Ok(true)
             } else {
-                debug!("{feed} does not exist in feed_hist.");
+                trace!("{feed} does not exist in feed_hist.");
                 Ok(false)
             }
         }
@@ -212,7 +212,7 @@ pub fn insert_feed_to_db(conn: &Connection, new_row: &DBEntry) -> Result<usize, 
         ),
     ) {
         Ok(ok) => {
-            debug!("Insert query updated {ok} rows.");
+            trace!("Insert query updated {ok} rows.");
             Ok(ok)
         }
         Err(err) => {
@@ -246,7 +246,7 @@ pub fn update_feed_headers(conn: &Connection, row: &DBHeaders) -> Result<usize, 
         params!(row.feed_name, row.last_modified, row.etag),
     ) {
         Ok(ok) => {
-            debug!("Update query updated {ok} rows.");
+            trace!("Update query updated {ok} rows.");
             Ok(ok)
         }
         Err(err) => {

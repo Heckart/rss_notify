@@ -1,7 +1,7 @@
 use crate::database::{DBEntry, get_feed_from_db, insert_feed_to_db};
 use crate::fetch::FeedBytesAndHeaders;
 use bytes::Bytes;
-use log::{debug, error, trace, warn};
+use log::{error, trace, warn};
 use rss::{Channel, Item, ItemBuilder};
 use rusqlite::Connection;
 use std::error;
@@ -141,7 +141,7 @@ pub fn stringify_feed_bytes(feed_bytes: &Bytes) -> Result<String, Box<dyn error:
 
     let serialized: String = match serde_json::to_string(&rss_channel.items().to_vec()) {
         Ok(json) => {
-            debug!("Successfully stringified feed bytes as {json}.");
+            trace!("Successfully stringified feed bytes as {json}.");
             json
         }
         Err(err) => {

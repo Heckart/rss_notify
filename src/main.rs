@@ -78,7 +78,7 @@ fn main() -> ! {
             let feed_elements: FeedBytesAndHeaders = match fetch_feed_as_bytes(&conn, url) {
                 Ok(elements) => {
                     if elements.is_some() {
-                        debug!("Sourced feed bytes for {url}.");
+                        trace!("Sourced feed bytes for {url}.");
                         // SAFETY: we have an earlier check that ensures bytes is Some
                         unsafe { elements.unwrap_unchecked() }
                     } else {
@@ -99,7 +99,7 @@ fn main() -> ! {
             let feed_items: Vec<Item> =
                 match get_new_rss_items(&conn, url, &feed_elements, &feed.blacklist) {
                     Ok(items) => {
-                        debug!("Grabbed feed items from {url}.");
+                        trace!("Grabbed feed items from {url}.");
                         items
                     }
                     Err(err) => {
@@ -114,7 +114,7 @@ fn main() -> ! {
 
             // if new items exist, send a push for them each
             if feed_items.is_empty() {
-                info!("No new items found for {url} since last check.");
+                info!("Full GET request for {url} did not return new items.");
             } else {
                 info!(
                     "{} new feed items exist from {url}, so sending pushes.",
@@ -206,7 +206,6 @@ fn try_send_failure_notification(errors: &mut Vec<String>, new_error: Option<Str
         "Inside try_send_failure_notification error count {}.",
         errors.len()
     );
-    debug!("Total errors are {}.", errors.len());
 
     match send_failure_notification(errors) {
         Ok(ok) => {

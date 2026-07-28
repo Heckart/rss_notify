@@ -145,7 +145,7 @@ pub fn fetch_feed_as_bytes(
                 }
             }
         } else {
-            Ok(None) // NOT_MODIFIED response and no headers to update
+            Ok(None) // NOT_MODIFIED response and headers match, so no update needed
         }
     } else {
         Ok(None) // no bytes were returned from earlier, so we know there is no new content to parse
@@ -167,6 +167,7 @@ fn make_get_request(
     feed_url: &String,
     get_client: RequestBuilder,
 ) -> Result<ResponseDetails, Box<dyn error::Error>> {
+    #![allow(clippy::too_many_lines)]
     trace!("Inside make_get_request.");
 
     let response: Response = match RequestBuilder::send(get_client) {
@@ -180,10 +181,11 @@ fn make_get_request(
         }
     };
 
-    let response_etag: Option<String>;
-    let response_last_modified: Option<String>;
-    let response_bytes: Option<Bytes>;
-    let status_code: StatusCode;
+    let bytes: Option<Bytes>;
+    let etag: Option<String>;
+    let last_modified: Option<String>;
+    let response_type: StatusCode;
+
     match response.status() {
         StatusCode::NOT_MODIFIED => {
             debug!(
@@ -193,64 +195,76 @@ fn make_get_request(
             // sent, meaning one could change and we still get NOT_MODIFIED response. We will pass ahead
             // those values now just in case, though this situation admittedly seems like a rare
             // occurence
-            response_etag = match extract_header_as_string(&response, &ETAG) {
+            etag = match extract_header_as_string(&response, &ETAG) {
                 Ok(header_str) => {
-                    trace!("Recevied ETag as string.");
+                    trace!(
+                        "New (presumably matching) ETag for {feed_url} received as {}.",
+                        header_str.as_deref().unwrap_or("<None>")
+                    );
                     header_str
                 }
                 Err(err) => {
-                    error!("Did not receive ETag as string successfully.");
+                    error!("ETag extraction for {feed_url} failed.");
                     return Err(Box::new(err));
                 }
             };
-            response_last_modified = match extract_header_as_string(&response, &LAST_MODIFIED) {
+            last_modified = match extract_header_as_string(&response, &LAST_MODIFIED) {
                 Ok(header_str) => {
-                    trace!("Recevied Last-Modified as string.");
+                    debug!(
+                        "New (presumably matching) Last-Modified for {feed_url} received as {}.",
+                        header_str.as_deref().unwrap_or("<None>")
+                    );
                     header_str
                 }
                 Err(err) => {
-                    error!("Did not receive Last-Modified as string successfully.");
+                    error!("Last-Modified extraction for {feed_url} failed.");
                     return Err(Box::new(err));
                 }
             };
-            response_bytes = None;
-            status_code = StatusCode::NOT_MODIFIED;
+            bytes = None;
+            response_type = StatusCode::NOT_MODIFIED;
         }
         StatusCode::OK => {
             // full request was made
             debug!("Full GET request made for {feed_url}! Assuming new feed contents.");
 
-            response_etag = match extract_header_as_string(&response, &ETAG) {
+            etag = match extract_header_as_string(&response, &ETAG) {
                 Ok(header_str) => {
-                    trace!("Recevied ETag as string.");
+                    debug!(
+                        "New ETag header for {feed_url} received as {}.",
+                        header_str.as_deref().unwrap_or("<None>")
+                    );
                     header_str
                 }
                 Err(err) => {
-                    error!("Did not receive ETag as string successfully.");
+                    error!("ETag extraction for {feed_url} failed.");
                     return Err(Box::new(err));
                 }
             };
-            response_last_modified = match extract_header_as_string(&response, &LAST_MODIFIED) {
+            last_modified = match extract_header_as_string(&response, &LAST_MODIFIED) {
                 Ok(header_str) => {
-                    trace!("Recevied Last-Modified as string.");
+                    debug!(
+                        "New Last-Modified header for {feed_url} received as {}.",
+                        header_str.as_deref().unwrap_or("<None>")
+                    );
                     header_str
                 }
                 Err(err) => {
-                    error!("Did not receive Last-Modified as string successfully.");
+                    error!("Last-Modified extraction for {feed_url} failed.");
                     return Err(Box::new(err));
                 }
             };
-            response_bytes = match response.bytes() {
-                Ok(bytes) => {
+            bytes = match response.bytes() {
+                Ok(resp_bytes) => {
                     trace!("Extracted bytes from response.");
-                    Some(bytes)
+                    Some(resp_bytes)
                 }
                 Err(err) => {
-                    error!("Could not extract bytes from response.");
+                    error!("Bytes extraction for {feed_url} failed.");
                     return Err(Box::new(err));
                 }
             };
-            status_code = StatusCode::OK;
+            response_type = StatusCode::OK;
         }
         other_rc => {
             // most likely this ends up being a 412 based on the standard
@@ -258,18 +272,18 @@ fn make_get_request(
                 "GET request for {feed_url} had unexpected status code {other_rc}! Not sure what happened, so doing nothing."
             );
             // Don't update the headers here. We may have missed content and want to grab it next time.
-            response_etag = None;
-            response_last_modified = None;
-            response_bytes = None;
-            status_code = other_rc;
+            etag = None;
+            last_modified = None;
+            bytes = None;
+            response_type = other_rc;
         }
     }
 
     Ok(ResponseDetails {
-        bytes: response_bytes,
-        etag: response_etag,
-        last_modified: response_last_modified,
-        response_type: status_code,
+        bytes,
+        etag,
+        last_modified,
+        response_type,
     })
 }
 
@@ -329,12 +343,19 @@ fn get_existing_feed(
         // you can send multiple conditional headers
         // https://datatracker.ietf.org/doc/html/rfc7232#section-6
         if let Some(etag) = current_db_entry.etag {
+            debug!("Existing ETag for {feed_url} is {etag}.");
             get_client = get_client.header(IF_NONE_MATCH, etag);
+        } else {
+            debug!("No existing ETag for {feed_url}.");
         }
         if let Some(last_modified) = current_db_entry.last_modified {
+            debug!("Existing Last-Modified for {feed_url} is {last_modified}.");
             get_client = get_client.header(IF_MODIFIED_SINCE, last_modified);
+        } else {
+            debug!("No existing Last-Modified for {feed_url}.");
         }
     }
+
     make_get_request(feed_url, get_client)
 }
 
@@ -372,7 +393,7 @@ fn update_db_with_new_feed_info(
 
     match insert_feed_to_db(conn, &new_row) {
         Ok(rc) => {
-            debug!("DB responded with {rc} after insert for {feed_url}.");
+            trace!("DB responded with {rc} after insert for {feed_url}.");
             Ok(rc)
         }
         Err(err) => {

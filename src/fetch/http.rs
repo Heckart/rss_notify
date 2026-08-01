@@ -43,6 +43,7 @@ pub fn fetch_feed_as_bytes(
     conn: &Connection,
     feed_url: &String,
 ) -> Result<Option<FeedBytesAndHeaders>, Box<dyn error::Error>> {
+    #![allow(clippy::too_many_lines)]
     trace!("Inside fetch_feed_as_bytes with feed_url of {feed_url}.");
 
     let feed_response: ResponseDetails;
@@ -108,6 +109,32 @@ pub fn fetch_feed_as_bytes(
             last_modified: feed_response.last_modified,
         };
 
+        let hacky_debugging_fake_struct = DBEntry {
+            feed_name: String::new(),
+            history: String::new(),
+            last_modified: None,
+            etag: None,
+        };
+        debug!(
+            "Pulled {feed_url} and received OK response and bytes.\nExisting Last-Modified header: {}. New Last-Modified: {}\nExisting ETag: {}. New ETag: {}.",
+            existing_db_entry
+                .as_ref()
+                .unwrap_or(&hacky_debugging_fake_struct)
+                .last_modified
+                .as_deref()
+                .unwrap_or("<None>"),
+            returned_feed_elements
+                .last_modified
+                .as_deref()
+                .unwrap_or("<None>"),
+            existing_db_entry
+                .as_ref()
+                .unwrap_or(&hacky_debugging_fake_struct)
+                .etag
+                .as_deref()
+                .unwrap_or("<None>"),
+            returned_feed_elements.etag.as_deref().unwrap_or("<None>"),
+        );
         // only calling this function if we know its the first time the feed has been seen
         if first_time_feed {
             match update_db_with_new_feed_info(conn, feed_url, &returned_feed_elements) {
@@ -121,23 +148,35 @@ pub fn fetch_feed_as_bytes(
                 }
             }
         }
-        Ok(Some(returned_feed_elements)) // OK response + new bytes on existing feed
+        // Not a new feed, so headers will be updated in parse step.
+        Ok(Some(returned_feed_elements))
     } else if feed_response.response_type == StatusCode::NOT_MODIFIED {
         if let Some(current_db_entry) = existing_db_entry
             && (feed_response.etag != current_db_entry.etag
                 || feed_response.last_modified != current_db_entry.last_modified)
         {
+            debug!(
+                "Pulled {feed_url} and received NOT_MODIFIED response with different headers\nExisting Last-Modified: {}. New Last-Modified: {}\nExisting ETag: {}. New ETag: {}.",
+                current_db_entry
+                    .last_modified
+                    .as_deref()
+                    .unwrap_or("<None>"),
+                feed_response.last_modified.as_deref().unwrap_or("<None>"),
+                current_db_entry.etag.as_deref().unwrap_or("<None>"),
+                feed_response.etag.as_deref().unwrap_or("<None>")
+            );
+
             match update_feed_headers(
                 conn,
                 &DBHeaders {
                     feed_name: current_db_entry.feed_name,
-                    etag: feed_response.etag,
-                    last_modified: feed_response.last_modified,
+                    etag: feed_response.etag.clone(),
+                    last_modified: feed_response.last_modified.clone(),
                 },
             ) {
                 Ok(_) => {
                     trace!("Headers updated successfully.");
-                    Ok(None) // NOT_MODIFIED response, but had headers to update with no feed changes
+                    Ok(None)
                 }
                 Err(err) => {
                     error!("Headers could not be updated due to {err}.");
@@ -145,9 +184,39 @@ pub fn fetch_feed_as_bytes(
                 }
             }
         } else {
-            Ok(None) // NOT_MODIFIED response and headers match, so no update needed
+            trace!(
+                "Pulled {feed_url} and received NOT_MODIFED response with matching headers, so no update needed. Last-Modified: {}. ETag: {}.",
+                feed_response.last_modified.as_deref().unwrap_or("<None>"),
+                feed_response.etag.as_deref().unwrap_or("<None>")
+            );
+            Ok(None)
         }
     } else {
+        let hacky_debugging_fake_struct = DBEntry {
+            feed_name: String::new(),
+            history: String::new(),
+            last_modified: None,
+            etag: None,
+        };
+
+        warn!(
+            "Pulled {feed_url} and received no bytes back, not updating headers.\nExisting Last-Modified header: {}. New Last-Modified: {}\nExisting ETag: {}. New ETag: {}.",
+            existing_db_entry
+                .as_ref()
+                .unwrap_or(&hacky_debugging_fake_struct)
+                .last_modified
+                .as_deref()
+                .unwrap_or("<None>"),
+            feed_response.last_modified.as_deref().unwrap_or("<None>"),
+            existing_db_entry
+                .as_ref()
+                .unwrap_or(&hacky_debugging_fake_struct)
+                .etag
+                .as_deref()
+                .unwrap_or("<None>"),
+            feed_response.etag.as_deref().unwrap_or("<None>"),
+        );
+
         Ok(None) // no bytes were returned from earlier, so we know there is no new content to parse
     }
 }
@@ -167,7 +236,6 @@ fn make_get_request(
     feed_url: &String,
     get_client: RequestBuilder,
 ) -> Result<ResponseDetails, Box<dyn error::Error>> {
-    #![allow(clippy::too_many_lines)]
     trace!("Inside make_get_request.");
 
     let response: Response = match RequestBuilder::send(get_client) {
@@ -197,10 +265,7 @@ fn make_get_request(
             // occurence
             etag = match extract_header_as_string(&response, &ETAG) {
                 Ok(header_str) => {
-                    trace!(
-                        "New (presumably matching) ETag for {feed_url} received as {}.",
-                        header_str.as_deref().unwrap_or("<None>")
-                    );
+                    trace!("New (presumably matching) ETag successfully extraced.");
                     header_str
                 }
                 Err(err) => {
@@ -210,10 +275,7 @@ fn make_get_request(
             };
             last_modified = match extract_header_as_string(&response, &LAST_MODIFIED) {
                 Ok(header_str) => {
-                    debug!(
-                        "New (presumably matching) Last-Modified for {feed_url} received as {}.",
-                        header_str.as_deref().unwrap_or("<None>")
-                    );
+                    debug!("New (presumably matching) Last-Modified successfully extracted.");
                     header_str
                 }
                 Err(err) => {
@@ -230,10 +292,7 @@ fn make_get_request(
 
             etag = match extract_header_as_string(&response, &ETAG) {
                 Ok(header_str) => {
-                    debug!(
-                        "New ETag header for {feed_url} received as {}.",
-                        header_str.as_deref().unwrap_or("<None>")
-                    );
+                    debug!("New ETag header successfully extraced.");
                     header_str
                 }
                 Err(err) => {
@@ -243,10 +302,7 @@ fn make_get_request(
             };
             last_modified = match extract_header_as_string(&response, &LAST_MODIFIED) {
                 Ok(header_str) => {
-                    debug!(
-                        "New Last-Modified header for {feed_url} received as {}.",
-                        header_str.as_deref().unwrap_or("<None>")
-                    );
+                    debug!("New Last-Modified header successfully extracted.");
                     header_str
                 }
                 Err(err) => {
@@ -343,16 +399,10 @@ fn get_existing_feed(
         // you can send multiple conditional headers
         // https://datatracker.ietf.org/doc/html/rfc7232#section-6
         if let Some(etag) = current_db_entry.etag {
-            debug!("Existing ETag for {feed_url} is {etag}.");
             get_client = get_client.header(IF_NONE_MATCH, etag);
-        } else {
-            debug!("No existing ETag for {feed_url}.");
         }
         if let Some(last_modified) = current_db_entry.last_modified {
-            debug!("Existing Last-Modified for {feed_url} is {last_modified}.");
             get_client = get_client.header(IF_MODIFIED_SINCE, last_modified);
-        } else {
-            debug!("No existing Last-Modified for {feed_url}.");
         }
     }
 

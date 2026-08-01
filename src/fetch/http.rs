@@ -275,7 +275,7 @@ fn make_get_request(
             };
             last_modified = match extract_header_as_string(&response, &LAST_MODIFIED) {
                 Ok(header_str) => {
-                    debug!("New (presumably matching) Last-Modified successfully extracted.");
+                    trace!("New (presumably matching) Last-Modified successfully extracted.");
                     header_str
                 }
                 Err(err) => {
@@ -292,7 +292,7 @@ fn make_get_request(
 
             etag = match extract_header_as_string(&response, &ETAG) {
                 Ok(header_str) => {
-                    debug!("New ETag header successfully extraced.");
+                    trace!("New ETag header successfully extraced.");
                     header_str
                 }
                 Err(err) => {
@@ -302,7 +302,7 @@ fn make_get_request(
             };
             last_modified = match extract_header_as_string(&response, &LAST_MODIFIED) {
                 Ok(header_str) => {
-                    debug!("New Last-Modified header successfully extracted.");
+                    trace!("New Last-Modified header successfully extracted.");
                     header_str
                 }
                 Err(err) => {
